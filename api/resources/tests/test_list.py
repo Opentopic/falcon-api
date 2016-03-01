@@ -41,7 +41,7 @@ class ListResourceTest(unittest.TestCase):
         object_list = resource.get_object_list(queryset=[1, 2, 3, 4], limit=3, offset=None)
         self.assertEqual([1, 2, 3], object_list)
 
-    def test_get_object_list_with_limit(self):
+    def test_get_object_list_with_offset(self):
         """
         test collecting object_list when there is offset set
         """
