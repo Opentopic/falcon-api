@@ -22,11 +22,5 @@ setup(
     install_requires=[
         'cython==0.23.4',
         'falcon==0.3.0',
-        'recommonmark==0.4.0',
-        'Sphinx==1.3.5',
-        'sphinx-autobuild==0.6.0',
-        'sphinx-rtd-theme==0.1.9',
-        'pytest==2.8.7',
-        'pylint==1.5.4',
     ],
 )
