@@ -26,5 +26,6 @@ setup(
         'Sphinx==1.3.5',
         'sphinx-autobuild==0.6.0',
         'sphinx-rtd-theme==0.1.9',
+        'pytest==2.8.7',
     ],
 )
