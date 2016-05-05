@@ -128,9 +128,11 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             limit = self.max_limit
         if offset is None:
             offset = 0
-        limit = max(min(limit, self.max_limit), 0)
+        if limit is not None:
+            limit = max(min(limit, self.max_limit), 0)
+            queryset = queryset.limit(limit)
         offset = max(offset, 0)
-        return queryset.limit(limit).offset(offset)
+        return queryset.offset(offset)
 
     def on_get(self, req, resp):
         limit = None
