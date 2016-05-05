@@ -133,8 +133,16 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         return queryset.limit(limit).offset(offset)
 
     def on_get(self, req, resp):
-        limit = int(req.context['doc'].get('limit'))
-        offset = int(req.context['doc'].get('offset'))
+        limit = None
+        offset = None
+        if 'limit' in req.params:
+            limit = int(req.params['limit'])
+        elif 'doc' in req.context:
+            limit = int(req.context['doc'].get('limit'))
+        if 'offset' in req.params:
+            offset = int(req.params['offset'])
+        elif 'doc' in req.context:
+            offset = int(req.context['doc'].get('offset'))
 
         with session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
