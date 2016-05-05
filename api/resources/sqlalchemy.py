@@ -236,7 +236,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
                 if errors:
                     result = {'errors': errors}
                 else:
-                    result = self.update(req, resp, obj, data, db_session)
+                    result = self.update(req, resp, data, obj, db_session)
         except (IntegrityError, ProgrammingError) as err:
             # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
             # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation

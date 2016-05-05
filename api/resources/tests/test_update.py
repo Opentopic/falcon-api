@@ -1,6 +1,6 @@
 import unittest
 
-from falcon import Request, Response
+from falcon import Request, Response, errors
 from falcon.testing import create_environ
 
 from api.resources.mongoengine import SingleResource
@@ -56,8 +56,8 @@ class UpdateResourceTest(unittest.TestCase):
         }
         resp = Response()
 
-        resource.on_patch(req, resp)
-        self.assertEqual(req.context['result']['errors'], ['PK param was not provided'])
+        with self.assertRaises(Exception) as context:
+            resource.on_patch(req, resp)
 
     def test_update_get_object(self):
         """
@@ -72,7 +72,7 @@ class UpdateResourceTest(unittest.TestCase):
         resp = Response()
 
         resource.objects_class = FakeObjectList()
-        obj = resource.get_object(req=req, resp=resp)
+        obj = resource.get_object(req=req, resp=resp, path_params={})
         self.assertEqual(obj.pk, 1)
 
     def test_update_when_no_expected_params_is_set(self):
@@ -85,6 +85,12 @@ class UpdateResourceTest(unittest.TestCase):
         req.context = {
             'doc': {'pk': 1, 'name': 'TestNewName'}
         }
+
+        def clean(data):
+            return {}, {}
+
+        resource.clean = clean
+
         resp = Response()
 
         resource.objects_class = FakeObjectList()

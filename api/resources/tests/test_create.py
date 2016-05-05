@@ -45,7 +45,7 @@ class CreateResourceTest(unittest.TestCase):
         self.assertEqual(data, {
             'id': 1,
         })
-        self.assertEqual(errors, {'name': 'Test Error Message'})
+        self.assertEqual(errors, {'name': ['Test Error Message']})
 
     def test_on_put_success_result(self):
         """
@@ -82,14 +82,15 @@ class CreateResourceTest(unittest.TestCase):
             }
         }
 
-        def clean_name_test(self):
-            raise ParamException('Test Error Message')
+        def clean(data):
+            if 'name' not in data:
+                return {}, {'name': ['Test Error Message']}
 
-        resource.clean_name = clean_name_test
+        resource.clean = clean
 
         resp = Response()
         resource.on_put(req=req, resp=resp)
         self.assertEqual(
             req.context['result'],
-            {'errors': {'name': 'Test Error Message'}}
+            {'errors': {'name': ['Test Error Message']}}
         )

@@ -74,15 +74,17 @@ class BaseResource(object):
         :return: a tuple of data and errors after additional cleanup
         """
         errors = {}
+        result = {}
         for key, value in data.items():
             valid_func = getattr(self, 'clean_%s' % key, None)
             if not valid_func:
+                result[key] = value
                 continue
             try:
-                data[key] = valid_func(value)
+                result[key] = valid_func(value)
             except ParamException as e:
                 errors.setdefault(key, []).append(str(e))
-        return data, errors
+        return result, errors
 
 
 class BaseCollectionResource(BaseResource):
@@ -330,7 +332,7 @@ class BaseSingleResource(BaseResource):
         if errors:
             result = {'errors': errors}
         else:
-            result = self.update(req, resp, obj, data)
+            result = self.update(req, resp, data, obj)
         self.render_response(result, req, resp)
 
     def on_patch(self, req, resp, *args, **kwargs):
