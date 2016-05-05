@@ -36,7 +36,7 @@ class AlchemyMixin(object):
     """
     def serialize(self, obj):
         data = {}
-        attrs = inspect(obj).attrs
+        attrs = inspect(self.objects_class).attrs
         for attr in attrs.keys():
             if not isinstance(attrs[attr], ColumnProperty):
                 continue
