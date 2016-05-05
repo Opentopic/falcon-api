@@ -155,7 +155,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             result = {
                 'results': [self.serialize(obj) for obj in object_list],
                 'total': total,
-                'returned': len(object_list)
+                'returned': object_list.count(),
             }
 
         self.render_response(result, req, resp)
