@@ -3,7 +3,7 @@ import unittest
 from falcon import Request, Response
 from falcon.testing import create_environ
 
-from api.resources.update import UpdateResource
+from api.resources.mongoengine import SingleResource
 
 
 class FakeObject(object):
@@ -30,7 +30,7 @@ class FakeObjectList(object):
         return FakeObject(pk=pk)
 
 
-def fake_to_json(obj):
+def fake_serialize(obj):
     """fake object to json func"""
     return {
         'pk': obj.pk,
@@ -48,7 +48,7 @@ class UpdateResourceTest(unittest.TestCase):
         """
         test how update function will handle when we are not going to pass pk value
         """
-        resource = UpdateResource(objects_class=None, expected_params=[])
+        resource = SingleResource(objects_class=None)
         env = create_environ(path='/')
         req = Request(env)
         req.context = {
@@ -63,7 +63,7 @@ class UpdateResourceTest(unittest.TestCase):
         """
         Test `get_object` func
         """
-        resource = UpdateResource(objects_class=None, expected_params=[])
+        resource = SingleResource(objects_class=None)
         env = create_environ(path='/')
         req = Request(env)
         req.context = {
@@ -79,7 +79,7 @@ class UpdateResourceTest(unittest.TestCase):
         """
         Test if update func will not update param if it's not defined in expected params
         """
-        resource = UpdateResource(objects_class=None, expected_params=[])
+        resource = SingleResource(objects_class=None)
         env = create_environ(path='/')
         req = Request(env)
         req.context = {
@@ -88,7 +88,7 @@ class UpdateResourceTest(unittest.TestCase):
         resp = Response()
 
         resource.objects_class = FakeObjectList()
-        resource.to_json = fake_to_json
+        resource.serialize = fake_serialize
         resource.on_patch(req, resp)
         self.assertEqual(
             {'pk': 1, 'name': 'OldName', '_saved': True},
@@ -99,7 +99,7 @@ class UpdateResourceTest(unittest.TestCase):
         """
         Test if param is updated and returned
         """
-        resource = UpdateResource(objects_class=None, expected_params=['name'])
+        resource = SingleResource(objects_class=None)
         env = create_environ(path='/')
         req = Request(env)
         req.context = {
@@ -108,7 +108,7 @@ class UpdateResourceTest(unittest.TestCase):
         resp = Response()
 
         resource.objects_class = FakeObjectList()
-        resource.to_json = fake_to_json
+        resource.serialize = fake_serialize
         resource.on_patch(req, resp)
         self.assertEqual(
             {'pk': 1, 'name': 'TestNewName', '_saved': True},

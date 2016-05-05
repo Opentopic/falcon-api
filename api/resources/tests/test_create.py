@@ -4,7 +4,7 @@ from falcon import Request, Response
 from falcon.testing import create_environ
 
 from api.exceptions import ParamException
-from api.resources.create import CreateResource
+from api.resources.mongoengine import CollectionResource
 
 
 class FakeObjectClass(dict):
@@ -21,69 +21,11 @@ class CreateResourceTest(unittest.TestCase):
     Testcase for :class:`api.resources.create.CreateResource`
     """
 
-    def test_get_data_without_expected_params(self):
-        """
-        test if :func:`CreateResource.get_data` will return correct data if there is no expected params,
-        means no data no errors
-        """
-        resource = CreateResource(objects_class=None, expected_params=[])
-        env = create_environ(path='/')
-        req = Request(env)
-        req.context = {
-            'doc': {'id': 1, 'name': 'Opentopic'}
-        }
-        resp = Response()
-
-        data, errors = resource.get_data(req, resp)
-        self.assertEqual(data, {})
-        self.assertEqual(errors, {})
-
-    def test_get_data_with_expected_params_but_no_data(self):
-        """
-        test if :func:`CreateResource.get_data` will act correctly if expected params are not going to be send
-        in request. By default expected params != required params so it just should return dict with empty values
-        """
-
-        resource = CreateResource(objects_class=None, expected_params=['id', 'name'])
-        env = create_environ(path='/')
-        req = Request(env)
-        req.context = {
-            'doc': {}
-        }
-        resp = Response()
-
-        data, errors = resource.get_data(req, resp)
-        self.assertEqual(data, {'id': None, 'name': None})
-        self.assertEqual(errors, {})
-
-    def test_get_data_with_send_and_expected_params(self):
-        """
-        test if :func:`CreateResource.get_data` will act correctly if expected params are in returned data
-         when they are send as well
-        """
-        resource = CreateResource(objects_class=None, expected_params=['id', 'name'])
-        env = create_environ(path='/')
-        req = Request(env)
-        req.context = {
-            'doc': {
-                'id': 1,
-                'name': 'Opentopic'
-            }
-        }
-        resp = Response()
-
-        data, errors = resource.get_data(req, resp)
-        self.assertEqual(data, {
-            'id': 1,
-            'name': 'Opentopic'
-        })
-        self.assertEqual(errors, {})
-
-    def test_get_data_check_error_raising(self):
+    def test_clean_check_error_raising(self):
         """
         check if :func:`CreateResource.get_data` return errors dict when `clean_param_name` raise `ParamException`
         """
-        resource = CreateResource(objects_class=None, expected_params=['id', 'name'])
+        resource = CollectionResource(objects_class=None)
         env = create_environ(path='/')
         req = Request(env)
         req.context = {
@@ -99,7 +41,7 @@ class CreateResourceTest(unittest.TestCase):
 
         resource.clean_name = clean_name_test
 
-        data, errors = resource.get_data(req, resp)
+        data, errors = resource.clean(req.context['doc'])
         self.assertEqual(data, {
             'id': 1,
         })
@@ -110,7 +52,7 @@ class CreateResourceTest(unittest.TestCase):
         test :func:`CreateResource.on_put` if we will receive correct response
         """
 
-        resource = CreateResource(objects_class=FakeObjectClass, expected_params=['id', 'name'])
+        resource = CollectionResource(objects_class=FakeObjectClass)
         env = create_environ(path='/')
         req = Request(env)
         req.context = {
@@ -131,7 +73,7 @@ class CreateResourceTest(unittest.TestCase):
         test :func:`CreateResource.on_put` if we will receive correct response
         """
 
-        resource = CreateResource(objects_class=FakeObjectClass, expected_params=['id', 'name'])
+        resource = CollectionResource(objects_class=FakeObjectClass)
         env = create_environ(path='/')
         req = Request(env)
         req.context = {
