@@ -121,7 +121,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.db_engine = db_engine
 
     def get_queryset(self, req, resp, db_session=None):
-        return self.filter_by_params(db_session.Query(self.objects_class), req.params)
+        return self.filter_by_params(db_session.query(self.objects_class), req.params)
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
