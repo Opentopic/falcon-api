@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from datetime import datetime, time
 from decimal import Decimal
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
-from sqlalchemy import inspect
+from sqlalchemy import inspect, schema
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
@@ -34,20 +34,20 @@ class AlchemyMixin(object):
     """
     Provides serialize and deserialize methods to convert between JSON and SQLAlchemy datatypes.
     """
-    def serialize(self, obj):
+    def serialize(self, obj, skip_keys=False):
         data = {}
-        attrs = inspect(obj).mapper.attrs
-        for attr in attrs.keys():
-            if not isinstance(attrs[attr], ColumnProperty):
+        columns = inspect(obj).mapper.columns
+        for key, column in columns.items():
+            if not skip_keys and (column.primary_key or isinstance(column.type, schema.ForeignKey)):
                 continue
-            value = getattr(obj, attr)
+            value = getattr(obj, key)
             if isinstance(value, datetime):
                 value = value.strftime('%Y-%m-%dT%H:%M:%SZ')
             elif isinstance(value, time):
                 value = value.isoformat()
             elif isinstance(value, Decimal):
                 value = float(value)
-            data[attr] = value
+            data[key] = value
         return data
 
     def deserialize(self, data):
@@ -84,7 +84,7 @@ class AlchemyMixin(object):
                 raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
 
             attr = getattr(self.objects_class, key, None)
-            if attr is None or not isinstance(inspect(self.objects_class).attrs[key], ColumnProperty):
+            if attr is None or key not in inspect(self.objects_class).column_attrs:
                 raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
             if comparison == '=':
                 resources = resources.filter(attr == value)
