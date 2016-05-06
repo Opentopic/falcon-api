@@ -190,7 +190,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
     def get_object(self, req, resp, path_params, db_session=None):
         query = db_session.query(self.objects_class)
 
-        for key, value in path_params:
+        for key, value in path_params.items():
             attr = getattr(self.objects_class, key, None)
             query = query.filter(attr == value)
 
