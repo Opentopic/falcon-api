@@ -38,7 +38,7 @@ class AlchemyMixin(object):
         data = {}
         columns = inspect(obj).mapper.columns
         for key, column in columns.items():
-            if not skip_keys and (column.primary_key or isinstance(column.type, schema.ForeignKey)):
+            if skip_keys and (column.primary_key or isinstance(column.type, schema.ForeignKey)):
                 continue
             value = getattr(obj, key)
             if isinstance(value, datetime):
