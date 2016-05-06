@@ -36,7 +36,7 @@ class AlchemyMixin(object):
     """
     def serialize(self, obj):
         data = {}
-        attrs = inspect(self.objects_class).attrs
+        attrs = inspect(obj).mapper.attrs
         for attr in attrs.keys():
             if not isinstance(attrs[attr], ColumnProperty):
                 continue
@@ -117,7 +117,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         :param db_engine: SQL Alchemy engine
         :type db_engine: sqlalchemy.engine.Engine
         """
-        super().__init__(objects_class)
+        super(CollectionResource, self).__init__(objects_class)
         self.db_engine = db_engine
 
     def get_queryset(self, req, resp, db_session=None):
@@ -184,7 +184,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         :param db_engine: SQL Alchemy engine
         :type db_engine: sqlalchemy.engine.Engine
         """
-        super().__init__(objects_class)
+        super(SingleResource, self).__init__(objects_class)
         self.db_engine = db_engine
 
     def get_object(self, req, resp, path_params, db_session=None):
