@@ -2,11 +2,10 @@ from contextlib import contextmanager
 from datetime import datetime, time
 from decimal import Decimal
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
-from sqlalchemy import inspect, schema
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
-from sqlalchemy.orm.properties import ColumnProperty
 from sqlalchemy.sql import sqltypes
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
@@ -76,6 +75,8 @@ class AlchemyMixin(object):
 
     def filter_by_params(self, resources, params):
         for filter_key, value in params.items():
+            if filter_key == CollectionResource.PARAM_LIMIT or filter_key == CollectionResource.PARAM_OFFSET:
+                continue
             filter_parts = filter_key.split('__')
             key = filter_parts[0]
             if len(filter_parts) == 1:
@@ -113,6 +114,9 @@ class AlchemyMixin(object):
 
 
 class CollectionResource(AlchemyMixin, BaseCollectionResource):
+    PARAM_LIMIT = 'limit'
+    PARAM_OFFSET = 'offset'
+
     def __init__(self, objects_class, db_engine):
         """
         :param objects_class: class represent single element of object lists that suppose to be returned
@@ -136,17 +140,20 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         offset = max(offset, 0)
         return queryset.offset(offset)
 
+    def get_param_or_post(self, req, name, default=None):
+        if name in req.params:
+            return req.params[name]
+        elif 'doc' in req.context:
+            return req.context['doc'].get(name, default)
+        return default
+
     def on_get(self, req, resp):
-        limit = None
-        offset = None
-        if 'limit' in req.params:
-            limit = int(req.params['limit'])
-        elif 'doc' in req.context:
-            limit = int(req.context['doc'].get('limit'))
-        if 'offset' in req.params:
-            offset = int(req.params['offset'])
-        elif 'doc' in req.context:
-            offset = int(req.context['doc'].get('offset'))
+        limit = self.get_param_or_post(req, self.PARAM_LIMIT)
+        offset = self.get_param_or_post(req, self.PARAM_OFFSET)
+        if limit is not None:
+            limit = int(limit)
+        if offset is not None:
+            offset = int(offset)
 
         with session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
