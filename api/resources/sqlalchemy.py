@@ -34,11 +34,13 @@ class AlchemyMixin(object):
     """
     Provides serialize and deserialize methods to convert between JSON and SQLAlchemy datatypes.
     """
-    def serialize(self, obj, skip_keys=False):
+    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False):
         data = {}
         columns = inspect(obj).mapper.columns
         for key, column in columns.items():
-            if skip_keys and (column.primary_key or len(column.foreign_keys)):
+            if skip_primary_key and column.primary_key:
+                continue
+            if skip_foreign_keys and len(column.foreign_keys):
                 continue
             value = getattr(obj, key)
             if isinstance(value, datetime):
