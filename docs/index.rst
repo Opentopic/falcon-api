@@ -9,6 +9,8 @@ Welcome to Opentopic-falcon api documentation!
 
    install
    tests
+   validation
+   middleware
    resources
 
 

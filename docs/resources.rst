@@ -7,8 +7,8 @@ Resources
 .. automodule:: api.resources.base
     :members:
 
-.. automodule:: api.resources.create
+.. automodule:: api.resources.mongoengine
     :members:
 
-.. automodule:: api.resources.list
+.. automodule:: api.resources.sqlalchemy
     :members:
