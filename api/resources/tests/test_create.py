@@ -34,7 +34,7 @@ class CreateResourceTest(unittest.TestCase):
                 'name': 'Opentopic'
             }
         }
-        resp = Response()
+        Response()
 
         def clean_name_test(self):
             raise ParamException('Test Error Message')

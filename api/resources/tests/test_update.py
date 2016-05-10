@@ -1,6 +1,6 @@
 import unittest
 
-from falcon import Request, Response, errors
+from falcon import Request, Response
 from falcon.testing import create_environ
 
 from api.resources.mongoengine import SingleResource
@@ -56,7 +56,7 @@ class UpdateResourceTest(unittest.TestCase):
         }
         resp = Response()
 
-        with self.assertRaises(Exception) as context:
+        with self.assertRaises(Exception):
             resource.on_patch(req, resp)
 
     def test_update_get_object(self):
