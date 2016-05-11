@@ -95,12 +95,32 @@ class AlchemyMixin(object):
         return attributes
 
     def filter_by(self, query, **kwargs):
+        """
+        :param query: SQLAlchemy Query object
+        :type query: sqlalchemy.orm.query.Query
+        :return: modified query
+        :rtype: sqlalchemy.orm.query.Query
+        """
         return self._filter_or_exclude(query, False, **kwargs)
 
     def exclude_by(self, query, **kwargs):
+        """
+        :param query: SQLAlchemy Query object
+        :type query: sqlalchemy.orm.query.Query
+        :return: modified query
+        :rtype: sqlalchemy.orm.query.Query
+        """
         return self._filter_or_exclude(query, True, **kwargs)
 
     def _filter_or_exclude(self, query, negate, **kwargs):
+        """
+        :param query: SQLAlchemy Query object
+        :type query: sqlalchemy.orm.query.Query
+        :param negate: should the filter expressions be negated
+        :type negate: bool
+        :return: modified query
+        :rtype: sqlalchemy.orm.query.Query
+        """
         def negate_if(expr):
             return expr if not negate else ~expr
         column = None
@@ -123,7 +143,7 @@ class AlchemyMixin(object):
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
                     mapper = mapper.relationships[token].mapper
-                    query = query.join(token, token, aliased=True)
+                    query = query.join(token, aliased=True)
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
