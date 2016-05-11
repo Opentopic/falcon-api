@@ -104,27 +104,40 @@ class AlchemyMixin(object):
         def negate_if(expr):
             return expr if not negate else ~expr
         column = None
+        obj_class = self.objects_class
+        mapper = inspect(obj_class)
 
         for arg, value in kwargs.items():
             if arg == CollectionResource.PARAM_LIMIT or arg == CollectionResource.PARAM_OFFSET:
                 continue
             for token in arg.split('__'):
-                if column is None:
-                    if token in inspect(self.objects_class).relationships:
-                        query = query.join(token)
-                        continue
-                    column = getattr(self.objects_class, token, None)
-                    if column is None or token not in inspect(self.objects_class).column_attrs:
-                        raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
-                if token not in self._underscore_operators:
+                if column is not None and token in self._underscore_operators:
+                    op = self._underscore_operators[token]
+                    query = query.filter(negate_if(op(column, *to_list(value))))
+                    # reset column, obj_class and mapper back to main object
+                    column = None
+                    obj_class = self.objects_class
+                    mapper = inspect(obj_class)
+                    continue
+                if token in mapper.relationships:
+                    # follow the relation and change current obj_class and mapper
+                    obj_class = mapper.relationships[token].mapper.class_
+                    mapper = mapper.relationships[token].mapper
+                    query = query.join(token, token, aliased=True)
+                    continue
+                if token not in mapper.column_attrs:
+                    # if token is not an op or relation it has to be a valid column
                     raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
-                op = self._underscore_operators[token]
-                query = query.filter(negate_if(op(column, *to_list(value))))
-                column = None
+                column = getattr(obj_class, token, None)
             if column is not None:
+                # if last token was a column, not an op, assume it's equality
+                # if it was a relation it's just going to be ignored
                 query = query.filter(negate_if(column == value))
-                column = None
             query = query.reset_joinpoint()
+            # reset everything back to main object
+            column = None
+            obj_class = self.objects_class
+            mapper = inspect(obj_class)
         return query
 
 
