@@ -163,7 +163,7 @@ class AlchemyMixin(object):
                     raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
                 column_name = getattr(obj_class, token, None)
                 """:type column: sqlalchemy.schema.Column"""
-                column = mapper.columns[column_name]
+                column = mapper.columns[token]
             if column_name is not None:
                 # if last token was a column, not an op, assume it's equality
                 # if it was a relation it's just going to be ignored
