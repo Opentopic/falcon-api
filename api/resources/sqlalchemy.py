@@ -131,6 +131,7 @@ class AlchemyMixin(object):
         """
         def negate_if(expr):
             return expr if not negate else ~expr
+        column = None
         column_name = None
         obj_class = self.objects_class
         mapper = inspect(obj_class)
