@@ -6,7 +6,8 @@ from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
-from sqlalchemy.sql import sqltypes
+from sqlalchemy.sql import sqltypes, operators, extract
+from sqlalchemy.util import to_list
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
@@ -30,6 +31,26 @@ def session_scope(db_engine):
 
 
 class AlchemyMixin(object):
+    _underscore_operators = {
+        'exact':        operators.eq,
+        'gt':           operators.gt,
+        'lte':          operators.lt,
+        'gte':          operators.ge,
+        'le':           operators.le,
+        'range':        operators.between_op,
+        'in':           operators.in_op,
+        'contains':     operators.contains_op,
+        'iexact':       operators.ilike_op,
+        'startswith':   operators.startswith_op,
+        'endswith':     operators.endswith_op,
+        'istartswith': lambda c, x: c.ilike(x.replace('%', '%%') + '%'),
+        'iendswith': lambda c, x: c.ilike('%' + x.replace('%', '%%')),
+        'isnull': lambda c, x: x and c is not None or c is None,
+        'year': lambda c, x: extract('year', c) == x,
+        'month': lambda c, x: extract('month', c) == x,
+        'day': lambda c, x: extract('day', c) == x
+    }
+
     """
     Provides serialize and deserialize methods to convert between JSON and SQLAlchemy datatypes.
     """
@@ -73,61 +94,56 @@ class AlchemyMixin(object):
 
         return attributes
 
-    def filter_by_params(self, resources, params):
-        for filter_key, value in params.items():
-            if filter_key == CollectionResource.PARAM_LIMIT or filter_key == CollectionResource.PARAM_OFFSET:
-                continue
-            filter_parts = filter_key.split('__')
-            key = filter_parts[0]
-            if len(filter_parts) == 1:
-                comparison = '='
-            elif len(filter_parts) == 2:
-                comparison = filter_parts[1]
-            else:
-                raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
+    def filter_by(self, query, **kwargs):
+        return self._filter_or_exclude(query, False, **kwargs)
 
-            attr = getattr(self.objects_class, key, None)
-            if attr is None or key not in inspect(self.objects_class).column_attrs:
-                raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
-            if comparison == '=':
-                resources = resources.filter(attr == value)
-            elif comparison == 'null':
-                if value != '0':
-                    resources = resources.filter(attr.is_(None))
-                else:
-                    resources = resources.filter(attr.isnot(None))
-            elif comparison == 'startswith':
-                resources = resources.filter(attr.like('{0}%'.format(value)))
-            elif comparison == 'contains':
-                resources = resources.filter(attr.like('%{0}%'.format(value)))
-            elif comparison == 'lt':
-                resources = resources.filter(attr < value)
-            elif comparison == 'lte':
-                resources = resources.filter(attr <= value)
-            elif comparison == 'gt':
-                resources = resources.filter(attr > value)
-            elif comparison == 'gte':
-                resources = resources.filter(attr >= value)
-            else:
-                raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
-        return resources
+    def exclude_by(self, query, **kwargs):
+        return self._filter_or_exclude(query, True, **kwargs)
+
+    def _filter_or_exclude(self, query, negate, **kwargs):
+        def negate_if(expr):
+            return expr if not negate else ~expr
+        column = None
+
+        for arg, value in kwargs.items():
+            if arg == CollectionResource.PARAM_LIMIT or arg == CollectionResource.PARAM_OFFSET:
+                continue
+            for token in arg.split('__'):
+                if column is None:
+                    if token in inspect(self.objects_class).relationships:
+                        query = query.join(token)
+                        continue
+                    column = getattr(self.objects_class, token, None)
+                    if column is None or token not in inspect(self.objects_class).column_attrs:
+                        raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
+                if token not in self._underscore_operators:
+                    raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
+                op = self._underscore_operators[token]
+                query = query.filter(negate_if(op(column, *to_list(value))))
+                column = None
+            if column is not None:
+                query = query.filter(negate_if(column == value))
+                column = None
+            query = query.reset_joinpoint()
+        return query
 
 
 class CollectionResource(AlchemyMixin, BaseCollectionResource):
     PARAM_LIMIT = 'limit'
     PARAM_OFFSET = 'offset'
+    VIOLATION_UNIQUE = '23505'
 
-    def __init__(self, objects_class, db_engine):
+    def __init__(self, objects_class, db_engine, max_limit=None):
         """
         :param objects_class: class represent single element of object lists that suppose to be returned
         :param db_engine: SQL Alchemy engine
         :type db_engine: sqlalchemy.engine.Engine
         """
-        super(CollectionResource, self).__init__(objects_class)
+        super(CollectionResource, self).__init__(objects_class, max_limit)
         self.db_engine = db_engine
 
     def get_queryset(self, req, resp, db_session=None):
-        return self.filter_by_params(db_session.query(self.objects_class), req.params)
+        return self.filter_by(db_session.query(self.objects_class), **req.params)
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
@@ -182,13 +198,15 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         except (IntegrityError, ProgrammingError) as err:
             # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
             # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
-            if isinstance(err, IntegrityError) or err.orig.args[1] == '23505':
+            if isinstance(err, IntegrityError) or err.orig.args[1] == self.VIOLATION_UNIQUE:
                 raise HTTPConflict('Conflict', 'Unique constraint violated')
             else:
                 raise
 
 
 class SingleResource(AlchemyMixin, BaseSingleResource):
+    VIOLATION_FOREIGN_KEY = '23503'
+
     def __init__(self, objects_class, db_engine):
         """
         :param objects_class: class represent single element of object lists that suppose to be returned
@@ -205,7 +223,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
             attr = getattr(self.objects_class, key, None)
             query = query.filter(attr == value)
 
-        query = self.filter_by_params(query, req.params)
+        query = self.filter_by(query, **req.params)
 
         try:
             obj = query.one()
@@ -233,7 +251,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
                 self.delete(req, resp, obj)
         except (IntegrityError, ProgrammingError) as err:
             # This should only be caused by foreign key constraint being violated
-            if isinstance(err, IntegrityError) or err.orig.args[1] == '23503':
+            if isinstance(err, IntegrityError) or err.orig.args[1] == self.VIOLATION_FOREIGN_KEY:
                 raise HTTPConflict('Conflict', 'Other content links to this')
             else:
                 raise
