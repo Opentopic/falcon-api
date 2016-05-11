@@ -7,7 +7,6 @@ from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
-from sqlalchemy.util import to_list
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
@@ -31,6 +30,8 @@ def session_scope(db_engine):
 
 
 class AlchemyMixin(object):
+    MULTIVALUE_SEPARATOR = ','
+
     _underscore_operators = {
         'exact':        operators.eq,
         'gt':           operators.gt,
@@ -62,15 +63,17 @@ class AlchemyMixin(object):
                 continue
             if skip_foreign_keys and len(column.foreign_keys):
                 continue
-            value = getattr(obj, key)
-            if isinstance(value, datetime):
-                value = value.strftime('%Y-%m-%dT%H:%M:%SZ')
-            elif isinstance(value, time):
-                value = value.isoformat()
-            elif isinstance(value, Decimal):
-                value = float(value)
-            data[key] = value
+            data[key] = self.serialize_column(column, getattr(obj, key))
         return data
+
+    def serialize_column(self, column, value):
+        if isinstance(value, datetime):
+            return value.strftime('%Y-%m-%dT%H:%M:%SZ')
+        elif isinstance(value, time):
+            return value.isoformat()
+        elif isinstance(value, Decimal):
+            return float(value)
+        return value
 
     def deserialize(self, data):
         mapper = inspect(self.objects_class)
@@ -81,18 +84,23 @@ class AlchemyMixin(object):
 
         for key, value in data.items():
             column = mapper.columns[key]
-            if isinstance(column.type, sqltypes.DateTime):
-                attributes[key] = datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ') if value is not None else None
-            elif isinstance(column.type, sqltypes.Time):
-                if value is not None:
-                    hour, minute, second = value.split(':')
-                    attributes[key] = time(int(hour), int(minute), int(second))
-                else:
-                    attributes[key] = None
-            else:
-                attributes[key] = value
+            attributes[key] = self.deserialize_column(column, value)
 
         return attributes
+
+    def deserialize_column(self, column, value):
+        if value is None:
+            return None
+        if isinstance(column.type, sqltypes.DateTime):
+            return datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ')
+        if isinstance(column.type, sqltypes.Time):
+            hour, minute, second = value.split(':')
+            return time(int(hour), int(minute), int(second))
+        if isinstance(column.type, sqltypes.Integer):
+            return int(value)
+        if isinstance(column.type, sqltypes.Float):
+            return float(value)
+        return value
 
     def filter_by(self, query, **kwargs):
         """
@@ -123,7 +131,7 @@ class AlchemyMixin(object):
         """
         def negate_if(expr):
             return expr if not negate else ~expr
-        column = None
+        column_name = None
         obj_class = self.objects_class
         mapper = inspect(obj_class)
 
@@ -131,11 +139,16 @@ class AlchemyMixin(object):
             if arg == CollectionResource.PARAM_LIMIT or arg == CollectionResource.PARAM_OFFSET:
                 continue
             for token in arg.split('__'):
-                if column is not None and token in self._underscore_operators:
+                if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
-                    query = query.filter(negate_if(op(column, *to_list(value))))
+                    if op in [operators.between_op, operators.in_op]:
+                        value = list(
+                            map(lambda x: self.deserialize_column(column, x), value.split(self.MULTIVALUE_SEPARATOR)))
+                    else:
+                        value = self.deserialize_column(column, value)
+                    query = query.filter(negate_if(op(column_name, *value if op == operators.between_op else value)))
                     # reset column, obj_class and mapper back to main object
-                    column = None
+                    column_name = None
                     obj_class = self.objects_class
                     mapper = inspect(obj_class)
                     continue
@@ -148,14 +161,17 @@ class AlchemyMixin(object):
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
                     raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
-                column = getattr(obj_class, token, None)
-            if column is not None:
+                column_name = getattr(obj_class, token, None)
+                """:type column: sqlalchemy.schema.Column"""
+                column = mapper.columns[column_name]
+            if column_name is not None:
                 # if last token was a column, not an op, assume it's equality
                 # if it was a relation it's just going to be ignored
-                query = query.filter(negate_if(column == value))
+                value = self.deserialize_column(column, value)
+                query = query.filter(negate_if(column_name == value))
             query = query.reset_joinpoint()
             # reset everything back to main object
-            column = None
+            column_name = None
             obj_class = self.objects_class
             mapper = inspect(obj_class)
         return query
