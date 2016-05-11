@@ -147,7 +147,7 @@ class AlchemyMixin(object):
                             map(lambda x: self.deserialize_column(column, x), value.split(self.MULTIVALUE_SEPARATOR)))
                     else:
                         value = self.deserialize_column(column, value)
-                    query = query.filter(negate_if(op(column_name, value))
+                    query = query.filter(negate_if(op(column_name, value)))
                     # reset column, obj_class and mapper back to main object
                     column_name = None
                     obj_class = self.objects_class
