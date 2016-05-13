@@ -189,7 +189,7 @@ class BaseCollectionResource(BaseResource):
         limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
 
-        object_list = self.get_object_list(queryset, int(limit), int(offset))
+        object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
 
         result = {
             'results': [self.serialize(obj) for obj in object_list],
