@@ -94,6 +94,8 @@ class BaseCollectionResource(BaseResource):
     * GET - fetch a list of records, filtered by using query params
     * POST - create a new record
     """
+    PARAM_LIMIT = 'limit'
+    PARAM_OFFSET = 'offset'
 
     def __init__(self, objects_class, max_limit=None):
         """
@@ -151,6 +153,26 @@ class BaseCollectionResource(BaseResource):
         offset = max(offset, 0)
         return queryset[offset:limit + offset]
 
+    def get_param_or_post(self, req, name, default=None):
+        """
+        Gets a list of records.
+
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param name: param name
+        :type name: str
+
+        :param default: Default value
+
+        :return: param extracted from query params or request body
+        """
+        if name in req.params:
+            return req.params[name]
+        elif 'doc' in req.context:
+            return req.context['doc'].get(name, default)
+        return default
+
     def on_get(self, req, resp):
         """
         Gets a list of records.
@@ -164,10 +186,10 @@ class BaseCollectionResource(BaseResource):
         queryset = self.get_queryset(req, resp)
         total = self.get_total_objects(queryset)
 
-        limit = int(req.context['doc'].get('limit', self.max_limit))
-        offset = int(req.context['doc'].get('offset', 0))
+        limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
+        offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
 
-        object_list = self.get_object_list(queryset, limit, offset)
+        object_list = self.get_object_list(queryset, int(limit), int(offset))
 
         result = {
             'results': [self.serialize(obj) for obj in object_list],

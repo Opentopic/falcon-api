@@ -179,8 +179,6 @@ class AlchemyMixin(object):
 
 
 class CollectionResource(AlchemyMixin, BaseCollectionResource):
-    PARAM_LIMIT = 'limit'
-    PARAM_OFFSET = 'offset'
     VIOLATION_UNIQUE = '23505'
 
     def __init__(self, objects_class, db_engine, max_limit=None):
@@ -207,13 +205,6 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             queryset = queryset.limit(limit)
         offset = max(offset, 0)
         return queryset.offset(offset)
-
-    def get_param_or_post(self, req, name, default=None):
-        if name in req.params:
-            return req.params[name]
-        elif 'doc' in req.context:
-            return req.context['doc'].get(name, default)
-        return default
 
     def on_get(self, req, resp):
         limit = self.get_param_or_post(req, self.PARAM_LIMIT)
