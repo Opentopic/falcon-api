@@ -147,11 +147,13 @@ class BaseCollectionResource(BaseResource):
         """
         if limit is None:
             limit = self.max_limit
-        if offset is None:
-            offset = 0
-        limit = max(min(limit, self.max_limit), 0)
-        offset = max(offset, 0)
-        return queryset[offset:limit + offset]
+        offset = 0 if offset is None else max(offset, 0)
+        if limit is not None:
+            if self.max_limit is not None:
+                limit = min(limit, self.max_limit)
+            limit = max(limit, 0)
+            return queryset[offset:limit + offset]
+        return queryset[offset:]
 
     def get_param_or_post(self, req, name, default=None):
         """
