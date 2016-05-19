@@ -5,6 +5,7 @@ from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
 
@@ -57,6 +58,10 @@ class AlchemyMixin(object):
     """
     def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False):
         data = {}
+        data = self.serialize_columns(obj, data, skip_primary_key, skip_foreign_keys)
+        return self.serialize_relations(obj, data)
+
+    def serialize_columns(self, obj, data, skip_primary_key=False, skip_foreign_keys=False):
         columns = inspect(obj).mapper.columns
         for key, column in columns.items():
             if skip_primary_key and column.primary_key:
@@ -64,6 +69,7 @@ class AlchemyMixin(object):
             if skip_foreign_keys and len(column.foreign_keys):
                 continue
             data[key] = self.serialize_column(column, getattr(obj, key))
+
         return data
 
     def serialize_column(self, column, value):
@@ -75,16 +81,43 @@ class AlchemyMixin(object):
             return float(value)
         return value
 
+    def serialize_relations(self, obj, data):
+        mapper = inspect(obj).mapper
+        ignored = list(getattr(self, 'serialize_ignore', []))
+        ignored.append(mapper.class_)
+        for relation in mapper.relationships:
+            if relation.mapper.class_ in ignored:
+                continue
+            rel_obj = getattr(obj, relation.key)
+            if rel_obj is None:
+                continue
+            if relation.direction == MANYTOONE:
+                data[relation.key] = self.serialize(rel_obj)
+            elif not relation.uselist:
+                data.update(self.serialize(rel_obj, skip_primary_key=True))
+            else:
+                data[relation.key] = {
+                    rel.id: self.serialize(rel, skip_primary_key=True) for rel in rel_obj
+                }
+        return data
+
     def deserialize(self, data):
-        mapper = inspect(self.objects_class)
         attributes = {}
 
         if data is None:
             return attributes
 
+        mapper = inspect(self.objects_class)
         for key, value in data.items():
-            column = mapper.columns[key]
-            attributes[key] = self.deserialize_column(column, value)
+            if key in mapper.relationships:
+                attributes[key] = []
+                for v in value.split(','):
+                    try:
+                        attributes[key].append(int(v))
+                    except ValueError:
+                        pass
+            elif key in mapper.columns:
+                attributes[key] = self.deserialize_column(mapper.columns[key], value)
 
         return attributes
 
