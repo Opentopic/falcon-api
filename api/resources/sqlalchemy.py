@@ -119,6 +119,8 @@ class AlchemyMixin(object):
                             attributes[key].push(int(v))
                         except ValueError:
                             pass
+                else:
+                    attributes[key] = value
             elif key in mapper.columns:
                 attributes[key] = self.deserialize_column(mapper.columns[key], value)
 
