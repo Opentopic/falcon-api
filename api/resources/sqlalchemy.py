@@ -113,7 +113,7 @@ class AlchemyMixin(object):
                 attributes[key] = []
                 for v in value.split(','):
                     try:
-                        attributes[key].append(int(v))
+                        attributes[key].push(int(v))
                     except ValueError:
                         pass
             elif key in mapper.columns:
@@ -262,10 +262,18 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.render_response(result, req, resp)
 
     def create(self, req, resp, data):
-        resource = self.objects_class(**data)
-
         try:
             with session_scope(self.db_engine) as db_session:
+                # replace any relations with objects instead of pks
+                mapper = inspect(self.objects_class)
+                for key, value in data.items():
+                    if key not in mapper.relationships:
+                        continue
+                    related_mapper = mapper.relationships[key].mapper
+                    data[key] = db_session.query(related_mapper.class_).filter(related_mapper.primary_key[0].in_(value))
+
+                # create and save the object
+                resource = self.objects_class(**data)
                 db_session.add(resource)
                 db_session.commit()
                 return self.serialize(resource)
