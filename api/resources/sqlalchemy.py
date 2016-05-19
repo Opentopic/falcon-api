@@ -56,10 +56,12 @@ class AlchemyMixin(object):
     """
     Provides serialize and deserialize methods to convert between JSON and SQLAlchemy datatypes.
     """
-    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False):
+    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, include_relations=True):
         data = {}
         data = self.serialize_columns(obj, data, skip_primary_key, skip_foreign_keys)
-        return self.serialize_relations(obj, data)
+        if include_relations:
+            data = self.serialize_relations(obj, data)
+        return data
 
     def serialize_columns(self, obj, data, skip_primary_key=False, skip_foreign_keys=False):
         columns = inspect(obj).mapper.columns
@@ -92,12 +94,12 @@ class AlchemyMixin(object):
             if rel_obj is None:
                 continue
             if relation.direction == MANYTOONE:
-                data[relation.key] = self.serialize(rel_obj)
+                data[relation.key] = self.serialize(rel_obj, include_relations=False)
             elif not relation.uselist:
-                data.update(self.serialize(rel_obj, skip_primary_key=True))
+                data.update(self.serialize(rel_obj, skip_primary_key=True, include_relations=False))
             else:
                 data[relation.key] = {
-                    rel.id: self.serialize(rel, skip_primary_key=True) for rel in rel_obj
+                    rel.id: self.serialize(rel, skip_primary_key=True, include_relations=False) for rel in rel_obj
                 }
         return data
 
