@@ -275,7 +275,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                     if key not in mapper.relationships:
                         continue
                     related_mapper = mapper.relationships[key].mapper
-                    data[key] = db_session.query(related_mapper.class_).filter(related_mapper.primary_key[0].in_(value))
+                    data[key] = db_session.query(related_mapper.class_).filter(
+                        related_mapper.primary_key[0].in_(value)).all()
 
                 # create and save the object
                 resource = self.objects_class(**data)
