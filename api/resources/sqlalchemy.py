@@ -112,12 +112,13 @@ class AlchemyMixin(object):
         mapper = inspect(self.objects_class)
         for key, value in data.items():
             if key in mapper.relationships:
-                attributes[key] = []
-                for v in value.split(','):
-                    try:
-                        attributes[key].push(int(v))
-                    except ValueError:
-                        pass
+                if isinstance(value, str):
+                    attributes[key] = []
+                    for v in value.split(','):
+                        try:
+                            attributes[key].push(int(v))
+                        except ValueError:
+                            pass
             elif key in mapper.columns:
                 attributes[key] = self.deserialize_column(mapper.columns[key], value)
 
