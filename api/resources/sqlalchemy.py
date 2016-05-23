@@ -195,7 +195,7 @@ class AlchemyMixin(object):
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
                     mapper = mapper.relationships[token].mapper
-                    query = query.join(token, aliased=True)
+                    query = query.join(token, aliased=True, from_joinpoint=True)
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
