@@ -31,6 +31,9 @@ def session_scope(db_engine):
 
 
 class AlchemyMixin(object):
+    """
+    Provides serialize and deserialize methods to convert between JSON and SQLAlchemy datatypes.
+    """
     MULTIVALUE_SEPARATOR = ','
 
     _underscore_operators = {
@@ -53,14 +56,27 @@ class AlchemyMixin(object):
         'day': lambda c, x: extract('day', c) == x
     }
 
-    """
-    Provides serialize and deserialize methods to convert between JSON and SQLAlchemy datatypes.
-    """
-    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, include_relations=True):
+    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, relations_level=1):
+        """
+        Converts the object to a serializable dictionary.
+        :param obj: the object to serialize
+
+        :param skip_primary_key: should primary keys be skipped
+        :type skip_primary_key: bool
+
+        :param skip_foreign_keys: should foreign keys be skipped
+        :type skip_foreign_keys: bool
+
+        :param relations_level: how many levels of relations to serialize
+        :type relations_level: int
+
+        :return: a serializable dictionary
+        :rtype: dict
+        """
         data = {}
         data = self.serialize_columns(obj, data, skip_primary_key, skip_foreign_keys)
-        if include_relations:
-            data = self.serialize_relations(obj, data)
+        if relations_level > 0:
+            data = self.serialize_relations(obj, data, relations_level)
         return data
 
     def serialize_columns(self, obj, data, skip_primary_key=False, skip_foreign_keys=False):
@@ -83,7 +99,7 @@ class AlchemyMixin(object):
             return float(value)
         return value
 
-    def serialize_relations(self, obj, data):
+    def serialize_relations(self, obj, data, relations_level=1):
         mapper = inspect(obj).mapper
         ignored = list(getattr(self, 'serialize_ignore', []))
         ignored.append(mapper.class_)
@@ -94,12 +110,13 @@ class AlchemyMixin(object):
             if rel_obj is None:
                 continue
             if relation.direction == MANYTOONE:
-                data[relation.key] = self.serialize(rel_obj, include_relations=False)
+                data[relation.key] = self.serialize(rel_obj, relations_level=relations_level - 1)
             elif not relation.uselist:
-                data.update(self.serialize(rel_obj, skip_primary_key=True, include_relations=False))
+                data.update(self.serialize(rel_obj, skip_primary_key=True, relations_level=relations_level - 1))
             else:
                 data[relation.key] = {
-                    rel.id: self.serialize(rel, skip_primary_key=True, include_relations=False) for rel in rel_obj
+                    rel.id: self.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1)
+                    for rel in rel_obj
                 }
         return data
 
