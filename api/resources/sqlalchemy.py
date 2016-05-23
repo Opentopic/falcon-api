@@ -106,8 +106,7 @@ class AlchemyMixin(object):
 
     def serialize_relations(self, obj, data, relations_level=1, relations_ignore=None):
         mapper = inspect(obj).mapper
-        if relations_ignore is None:
-            relations_ignore = []
+        relations_ignore = [] if relations_ignore is None else list(relations_ignore)
         relations_ignore.append(mapper.class_)
         for relation in mapper.relationships:
             if relation.mapper.class_ in relations_ignore:
