@@ -56,7 +56,7 @@ class AlchemyMixin(object):
         'day': lambda c, x: extract('day', c) == x
     }
 
-    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, relations_level=1):
+    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, relations_level=1, relations_ignore=None):
         """
         Converts the object to a serializable dictionary.
         :param obj: the object to serialize
@@ -70,13 +70,18 @@ class AlchemyMixin(object):
         :param relations_level: how many levels of relations to serialize
         :type relations_level: int
 
+        :param relations_ignore: relationship model classes to ignore
+        :type relations_ignore: list
+
         :return: a serializable dictionary
         :rtype: dict
         """
         data = {}
         data = self.serialize_columns(obj, data, skip_primary_key, skip_foreign_keys)
         if relations_level > 0:
-            data = self.serialize_relations(obj, data, relations_level)
+            if relations_ignore is None:
+                relations_ignore = list(getattr(self, 'serialize_ignore', []))
+            data = self.serialize_relations(obj, data, relations_level, relations_ignore)
         return data
 
     def serialize_columns(self, obj, data, skip_primary_key=False, skip_foreign_keys=False):
@@ -99,23 +104,30 @@ class AlchemyMixin(object):
             return float(value)
         return value
 
-    def serialize_relations(self, obj, data, relations_level=1):
+    def serialize_relations(self, obj, data, relations_level=1, relations_ignore=None):
         mapper = inspect(obj).mapper
-        ignored = list(getattr(self, 'serialize_ignore', []))
-        ignored.append(mapper.class_)
+        if relations_ignore is None:
+            relations_ignore = []
+        relations_ignore.append(mapper.class_)
         for relation in mapper.relationships:
-            if relation.mapper.class_ in ignored:
+            if relation.mapper.class_ in relations_ignore:
                 continue
             rel_obj = getattr(obj, relation.key)
             if rel_obj is None:
                 continue
             if relation.direction == MANYTOONE:
-                data[relation.key] = self.serialize(rel_obj, relations_level=relations_level - 1)
+                data[relation.key] = self.serialize(rel_obj,
+                                                    relations_level=relations_level - 1,
+                                                    relations_ignore=relations_ignore)
             elif not relation.uselist:
-                data.update(self.serialize(rel_obj, skip_primary_key=True, relations_level=relations_level - 1))
+                data.update(self.serialize(rel_obj, skip_primary_key=True,
+                                           relations_level=relations_level - 1,
+                                           relations_ignore=relations_ignore))
             else:
                 data[relation.key] = {
-                    rel.id: self.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1)
+                    rel.id: self.serialize(rel, skip_primary_key=True,
+                                           relations_level=relations_level - 1,
+                                           relations_ignore=relations_ignore)
                     for rel in rel_obj
                 }
         return data
