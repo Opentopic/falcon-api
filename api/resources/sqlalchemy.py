@@ -211,8 +211,9 @@ class AlchemyMixin(object):
                 if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
                     if op in [operators.between_op, operators.in_op]:
-                        value = list(
-                            map(lambda x: self.deserialize_column(column, x), value.split(self.MULTIVALUE_SEPARATOR)))
+                        if not isinstance(value, list):
+                            value = value.split(self.MULTIVALUE_SEPARATOR)
+                        value = list(map(lambda x: self.deserialize_column(column, x), value))
                     else:
                         value = self.deserialize_column(column, value)
                     query = query.filter(negate_if(op(column_name, value)))
@@ -225,7 +226,7 @@ class AlchemyMixin(object):
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
                     mapper = mapper.relationships[token].mapper
-                    query = query.join(token, aliased=True, from_joinpoint=True)
+                    query = query.distinct().join(token, aliased=True, from_joinpoint=True)
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
