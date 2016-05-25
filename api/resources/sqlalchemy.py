@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import falcon
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
-from sqlalchemy import inspect
+from sqlalchemy import inspect, func
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker, subqueryload
 from sqlalchemy.orm.base import MANYTOONE
@@ -263,6 +263,11 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         primary_keys = inspect(self.objects_class).primary_key
         query = db_session.query(self.objects_class).order_by(*primary_keys).options(subqueryload('*'))
         return self.filter_by(query, **req.params)
+
+    def get_total_objects(self, queryset):
+        primary_keys = inspect(self.objects_class).primary_key
+        count_q = queryset.statement.with_only_columns([func.count(*primary_keys)]).order_by(None)
+        return queryset.session.execute(count_q).scalar()
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
