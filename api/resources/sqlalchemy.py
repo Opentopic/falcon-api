@@ -6,7 +6,7 @@ import falcon
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError, ProgrammingError
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, subqueryload
 from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
@@ -260,7 +260,9 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.db_engine = db_engine
 
     def get_queryset(self, req, resp, db_session=None):
-        return self.filter_by(db_session.query(self.objects_class), **req.params)
+        primary_keys = inspect(self.objects_class).primary_key
+        query = db_session.query(self.objects_class).order_by(*primary_keys).options(subqueryload('*'))
+        return self.filter_by(query, **req.params)
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
