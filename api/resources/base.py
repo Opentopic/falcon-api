@@ -230,9 +230,12 @@ class BaseCollectionResource(BaseResource):
         data, errors = self.clean(data)
         if errors:
             result = {'errors': errors}
+            status_code = falcon.HTTP_BAD_REQUEST
         else:
             result = self.create(req, resp, data)
-        self.render_response(result, req, resp, falcon.HTTP_CREATED)
+            status_code = falcon.HTTP_CREATED
+
+        self.render_response(result, req, resp, status_code)
 
     def on_put(self, req, resp, *args, **kwargs):
         """
