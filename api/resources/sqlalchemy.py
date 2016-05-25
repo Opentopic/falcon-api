@@ -1,6 +1,8 @@
 from contextlib import contextmanager
 from datetime import datetime, time
 from decimal import Decimal
+
+import falcon
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError, ProgrammingError
@@ -382,6 +384,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         return self.serialize(obj)
 
     def on_put(self, req, resp, *args, **kwargs):
+        status_code = falcon.HTTP_OK
         try:
             with session_scope(self.db_engine) as db_session:
                 obj = self.get_object(req, resp, kwargs, db_session)
@@ -390,6 +393,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
                 data, errors = self.clean(data)
                 if errors:
                     result = {'errors': errors}
+                    status_code = falcon.HTTP_BAD_REQUEST
                 else:
                     result = self.update(req, resp, data, obj, db_session)
         except (IntegrityError, ProgrammingError) as err:
@@ -400,4 +404,4 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
             else:
                 raise
 
-        self.render_response(result, req, resp)
+        self.render_response(result, req, resp, status_code)
