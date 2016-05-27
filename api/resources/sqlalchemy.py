@@ -4,9 +4,9 @@ from decimal import Decimal
 
 import falcon
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
-from sqlalchemy import inspect
+from sqlalchemy import inspect, func
 from sqlalchemy.exc import IntegrityError, ProgrammingError
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, subqueryload
 from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
@@ -211,8 +211,9 @@ class AlchemyMixin(object):
                 if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
                     if op in [operators.between_op, operators.in_op]:
-                        value = list(
-                            map(lambda x: self.deserialize_column(column, x), value.split(self.MULTIVALUE_SEPARATOR)))
+                        if not isinstance(value, list):
+                            value = value.split(self.MULTIVALUE_SEPARATOR)
+                        value = list(map(lambda x: self.deserialize_column(column, x), value))
                     else:
                         value = self.deserialize_column(column, value)
                     query = query.filter(negate_if(op(column_name, value)))
@@ -225,7 +226,7 @@ class AlchemyMixin(object):
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
                     mapper = mapper.relationships[token].mapper
-                    query = query.join(token, aliased=True, from_joinpoint=True)
+                    query = query.distinct().join(token, aliased=True, from_joinpoint=True)
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
@@ -259,7 +260,14 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.db_engine = db_engine
 
     def get_queryset(self, req, resp, db_session=None):
-        return self.filter_by(db_session.query(self.objects_class), **req.params)
+        primary_keys = inspect(self.objects_class).primary_key
+        query = db_session.query(self.objects_class).order_by(*primary_keys).options(subqueryload('*'))
+        return self.filter_by(query, **req.params)
+
+    def get_total_objects(self, queryset):
+        primary_keys = inspect(self.objects_class).primary_key
+        count_q = queryset.statement.with_only_columns([func.count(*primary_keys)]).order_by(None)
+        return queryset.session.execute(count_q).scalar()
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
