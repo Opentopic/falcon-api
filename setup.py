@@ -4,7 +4,7 @@ setup(
     name='opentopic-falcon-api',
     version='0.1',
     author='Tomasz Roszko',
-    author_email='tom@opentopic',
+    author_email='tom@opentopic.com',
     description='Base Library for services api endpoints',
     url='http://git.opentopic.com/backend/falcon-api',
     license='GNU GENERAL PUBLIC LICENSE',
@@ -19,8 +19,5 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3.x',
     ],
-    install_requires=[
-        'cython==0.23.4',
-        'falcon==0.3.0',
-    ],
+    install_requires=open('requirements.txt').readlines(),
 )
