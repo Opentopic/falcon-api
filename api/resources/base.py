@@ -358,9 +358,11 @@ class BaseSingleResource(BaseResource):
         data, errors = self.clean(data)
         if errors:
             result = {'errors': errors}
+            status_code = falcon.HTTP_BAD_REQUEST
         else:
             result = self.update(req, resp, data, obj)
-        self.render_response(result, req, resp)
+            status_code = falcon.HTTP_OK
+        self.render_response(result, req, resp, status_code)
 
     def on_patch(self, req, resp, *args, **kwargs):
         """

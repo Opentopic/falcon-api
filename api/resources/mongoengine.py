@@ -5,7 +5,7 @@ from api.resources.base import BaseCollectionResource, BaseSingleResource
 
 class CollectionResource(BaseCollectionResource):
     def get_queryset(self, req, resp):
-        return self.objects_class.objects
+        return self.objects_class.objects(**req.params)
 
     def create(self, req, resp, data):
         obj = self.objects_class(**data)
