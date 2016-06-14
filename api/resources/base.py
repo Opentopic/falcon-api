@@ -170,7 +170,7 @@ class BaseCollectionResource(BaseResource):
         :return: param extracted from query params or request body
         """
         if name in req.params:
-            return req.params[name]
+            return req.params.pop(name)
         elif 'doc' in req.context:
             return req.context['doc'].get(name, default)
         return default
@@ -185,11 +185,11 @@ class BaseCollectionResource(BaseResource):
         :param resp: Falcon response
         :type resp: falcon.response.Response
         """
-        queryset = self.get_queryset(req, resp)
-        total = self.get_total_objects(queryset)
-
         limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
+
+        queryset = self.get_queryset(req, resp)
+        total = self.get_total_objects(queryset)
 
         object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
 
