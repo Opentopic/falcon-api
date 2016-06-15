@@ -5,7 +5,11 @@ from api.resources.base import BaseCollectionResource, BaseSingleResource
 
 class CollectionResource(BaseCollectionResource):
     def get_queryset(self, req, resp):
-        return self.objects_class.objects(**req.params)
+        queryset = self.objects_class.objects(**req.params)
+        order = self.get_param_or_post(req, self.PARAM_ORDER)
+        if order:
+            queryset.order_by(order)
+        return queryset
 
     def create(self, req, resp, data):
         obj = self.objects_class(**data)

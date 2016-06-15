@@ -96,6 +96,7 @@ class BaseCollectionResource(BaseResource):
     """
     PARAM_LIMIT = 'limit'
     PARAM_OFFSET = 'offset'
+    PARAM_ORDER = 'order'
 
     def __init__(self, objects_class, max_limit=None):
         """
@@ -157,7 +158,8 @@ class BaseCollectionResource(BaseResource):
 
     def get_param_or_post(self, req, name, default=None):
         """
-        Gets a list of records.
+        Gets specified param from request params or body.
+        If found in params, it's removed.
 
         :param req: Falcon request
         :type req: falcon.request.Request

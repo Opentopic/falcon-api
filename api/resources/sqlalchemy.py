@@ -174,6 +174,7 @@ class AlchemyMixin(object):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
+
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
@@ -183,6 +184,7 @@ class AlchemyMixin(object):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
+
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
@@ -192,8 +194,10 @@ class AlchemyMixin(object):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
+
         :param negate: should the filter expressions be negated
         :type negate: bool
+
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
@@ -205,8 +209,6 @@ class AlchemyMixin(object):
         mapper = inspect(obj_class)
 
         for arg, value in kwargs.items():
-            if arg == CollectionResource.PARAM_LIMIT or arg == CollectionResource.PARAM_OFFSET:
-                continue
             for token in arg.split('__'):
                 if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
@@ -246,6 +248,47 @@ class AlchemyMixin(object):
             mapper = inspect(obj_class)
         return query
 
+    def order_by(self, query, *args):
+        """
+        :param query: SQLAlchemy Query object
+        :type query: sqlalchemy.orm.query.Query
+
+        :return: modified query
+        :rtype: sqlalchemy.orm.query.Query
+        """
+        column = None
+        column_name = None
+        obj_class = self.objects_class
+        mapper = inspect(obj_class)
+
+        for arg in args:
+            is_ascending = True
+            if len(arg) and arg[0] == '+' or arg[0] == '-':
+                is_ascending = arg[:1] == '+'
+                arg = arg[1:]
+            for token in arg.split('__'):
+                if token in mapper.relationships:
+                    # follow the relation and change current obj_class and mapper
+                    obj_class = mapper.relationships[token].mapper.class_
+                    mapper = mapper.relationships[token].mapper
+                    query = query.distinct().join(token, aliased=True, from_joinpoint=True)
+                    continue
+                if token not in mapper.column_attrs:
+                    # if token is not an op or relation it has to be a valid column
+                    raise HTTPBadRequest('Invalid attribute', 'An attribute provided for ordering is invalid')
+                column_name = getattr(obj_class, token, None)
+                """:type column: sqlalchemy.schema.Column"""
+                column = mapper.columns[token]
+            if column_name is not None:
+                # if last token was a relation it's just going to be ignored
+                query = query.order_by(column if is_ascending else column.desc())
+            query = query.reset_joinpoint()
+            # reset everything back to main object
+            column_name = None
+            obj_class = self.objects_class
+            mapper = inspect(obj_class)
+        return query
+
 
 class CollectionResource(AlchemyMixin, BaseCollectionResource):
     VIOLATION_UNIQUE = '23505'
@@ -260,8 +303,13 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.db_engine = db_engine
 
     def get_queryset(self, req, resp, db_session=None):
-        primary_keys = inspect(self.objects_class).primary_key
-        query = db_session.query(self.objects_class).order_by(*primary_keys).options(subqueryload('*'))
+        query = db_session.query(self.objects_class).options(subqueryload('*'))
+        order = self.get_param_or_post(req, self.PARAM_ORDER)
+        if order:
+            query = self.order_by(query, *order)
+        else:
+            primary_keys = inspect(self.objects_class).primary_key
+            query = query.order_by(*primary_keys)
         return self.filter_by(query, **req.params)
 
     def get_total_objects(self, queryset):
