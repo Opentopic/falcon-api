@@ -86,6 +86,27 @@ class BaseResource(object):
                 errors.setdefault(key, []).append(str(e))
         return result, errors
 
+    def get_param_or_post(self, req, name, default=None):
+        """
+        Gets specified param from request params or body.
+        If found in params, it's removed.
+
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param name: param name
+        :type name: str
+
+        :param default: Default value
+
+        :return: param extracted from query params or request body
+        """
+        if name in req.params:
+            return req.params.pop(name)
+        elif 'doc' in req.context:
+            return req.context['doc'].get(name, default)
+        return default
+
 
 class BaseCollectionResource(BaseResource):
     """
@@ -155,27 +176,6 @@ class BaseCollectionResource(BaseResource):
             limit = max(limit, 0)
             return queryset[offset:limit + offset]
         return queryset[offset:]
-
-    def get_param_or_post(self, req, name, default=None):
-        """
-        Gets specified param from request params or body.
-        If found in params, it's removed.
-
-        :param req: Falcon request
-        :type req: falcon.request.Request
-
-        :param name: param name
-        :type name: str
-
-        :param default: Default value
-
-        :return: param extracted from query params or request body
-        """
-        if name in req.params:
-            return req.params.pop(name)
-        elif 'doc' in req.context:
-            return req.context['doc'].get(name, default)
-        return default
 
     def on_get(self, req, resp):
         """
