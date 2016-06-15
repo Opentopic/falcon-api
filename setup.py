@@ -1,9 +1,6 @@
 from setuptools import find_packages, setup
 
 
-with open('requirements.txt') as f:
-    REQUIREMENTS = f.read().splitlines()
-
 setup(
     name='opentopic-falcon-api',
     version='0.1.1',
@@ -23,5 +20,10 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3.x',
     ],
-    install_requires=REQUIREMENTS,
+    install_requires=[
+        'falcon~=1.0.0',
+        'mongoengine~=0.10.6',
+        'SQLAlchemy~=1.0.12',
+        'sphinx-rtd-theme==0.1.9'
+    ],
 )
