@@ -4,10 +4,9 @@ from setuptools import find_packages, setup
 with open('requirements.txt') as f:
     REQUIREMENTS = f.read().splitlines()
 
-
 setup(
     name='opentopic-falcon-api',
-    version='0.1',
+    version='0.1.1',
     author='Tomasz Roszko',
     author_email='tom@opentopic.com',
     description='Base Library for services api endpoints',
