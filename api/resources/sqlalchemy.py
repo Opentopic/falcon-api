@@ -346,10 +346,11 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
             object_list = self.get_object_list(query, limit, offset)
 
+            serialized = [self.serialize(obj) for obj in object_list]
             result = {
-                'results': [self.serialize(obj) for obj in object_list],
+                'results': serialized,
                 'total': total,
-                'returned': object_list.count(),
+                'returned': len(serialized),  # avoid calling object_list.count() which executes the query again
             }
 
         self.render_response(result, req, resp)
