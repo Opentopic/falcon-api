@@ -306,7 +306,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         query = db_session.query(self.objects_class).options(subqueryload('*'))
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if order:
-            query = self.order_by(query, *order)
+            query = self.order_by(query, *order if isinstance(order, list) else order)
         else:
             primary_keys = inspect(self.objects_class).primary_key
             query = query.order_by(*primary_keys)
