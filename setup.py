@@ -21,9 +21,9 @@ setup(
         'Programming Language :: Python :: 3.x',
     ],
     install_requires=[
-        'falcon~=1.0.0',
-        'mongoengine~=0.10.6',
-        'SQLAlchemy~=1.0.12',
+        'falcon==1.0.0',
+        'mongoengine==0.10.6',
+        'SQLAlchemy==1.0.12',
         'sphinx-rtd-theme==0.1.9'
     ],
 )
