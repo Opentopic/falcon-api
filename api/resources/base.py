@@ -190,9 +190,10 @@ class BaseCollectionResource(BaseResource):
         """
         limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
+        get_total = self.get_param_or_post(req, self.PARAM_TOTAL_COUNT)
 
         queryset = self.get_queryset(req, resp)
-        total = self.get_total_objects(queryset) if self.get_param_or_post(req, self.PARAM_TOTAL_COUNT) else None
+        total = self.get_total_objects(queryset) if get_total else None
 
         object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
 

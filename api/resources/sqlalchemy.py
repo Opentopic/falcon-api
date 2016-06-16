@@ -339,10 +339,11 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             limit = int(limit)
         if offset is not None:
             offset = int(offset)
+        get_total = self.get_param_or_post(req, self.PARAM_TOTAL_COUNT)
 
         with session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
-            total = self.get_total_objects(query) if self.get_param_or_post(req, self.PARAM_TOTAL_COUNT) else None
+            total = self.get_total_objects(query) if get_total else None
 
             object_list = self.get_object_list(query, limit, offset)
 
