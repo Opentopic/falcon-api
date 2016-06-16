@@ -118,6 +118,7 @@ class BaseCollectionResource(BaseResource):
     PARAM_LIMIT = 'limit'
     PARAM_OFFSET = 'offset'
     PARAM_ORDER = 'order'
+    PARAM_TOTAL_COUNT = 'total_count'
 
     def __init__(self, objects_class, max_limit=None):
         """
@@ -191,7 +192,7 @@ class BaseCollectionResource(BaseResource):
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
 
         queryset = self.get_queryset(req, resp)
-        total = self.get_total_objects(queryset)
+        total = self.get_total_objects(queryset) if self.get_param_or_post(req, self.PARAM_TOTAL_COUNT) else None
 
         object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
 
