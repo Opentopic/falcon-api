@@ -66,6 +66,7 @@ class MongoCollectionResourceTest(unittest.TestCase):
         req.context = {
             'doc': {}
         }
+        req.params[mongoengine.CollectionResource.PARAM_TOTAL_COUNT] = '1'
         resp = Response()
         resource = mongoengine.CollectionResource(objects_class=Mock(return_value=[1, 2, 3]), max_limit=2)
         resource.get_object_list = Mock(return_value=[1, 2])
