@@ -342,7 +342,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
         with session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
-            total = self.get_total_objects(query)
+            total = self.get_total_objects(query) if self.get_param_or_post(req, self.PARAM_TOTAL_COUNT) else None
 
             object_list = self.get_object_list(query, limit, offset)
 
