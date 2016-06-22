@@ -242,7 +242,7 @@ class AlchemyMixin(object):
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
-                    raise HTTPBadRequest('Invalid attribute', 'An attribute provided for filtering is invalid')
+                    raise HTTPBadRequest('Invalid attribute', 'Value of {} filter attribute is invalid'.format(token))
                 column_name = getattr(obj_class, token, None)
                 """:type column: sqlalchemy.schema.Column"""
                 column = mapper.columns[token]
@@ -285,7 +285,7 @@ class AlchemyMixin(object):
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
-                    raise HTTPBadRequest('Invalid attribute', 'An attribute provided for ordering is invalid')
+                    raise HTTPBadRequest('Invalid attribute', 'Value of {} filter attribute is invalid'.format(token))
                 column_name = getattr(obj_class, token, None)
                 """:type column: sqlalchemy.schema.Column"""
                 column = mapper.columns[token]
