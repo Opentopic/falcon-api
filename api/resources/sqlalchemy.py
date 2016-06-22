@@ -89,8 +89,8 @@ class AlchemyMixin(object):
         if relations_level > 0:
             if relations_ignore is None:
                 relations_ignore = list(getattr(self, 'serialize_ignore', []))
-            if relations_include is None:
-                relations_include = list(getattr(self, 'serialize_include', []))
+            if relations_include is None and hasattr(self, 'serialize_include'):
+                relations_include = list(getattr(self, 'serialize_include'))
             data = self.serialize_relations(obj, data, relations_level, relations_ignore, relations_include)
         return data
 
@@ -118,8 +118,6 @@ class AlchemyMixin(object):
         mapper = inspect(obj).mapper
         relations_ignore = [] if relations_ignore is None else list(relations_ignore)
         relations_ignore.append(mapper.class_)
-        if relations_include is not None:
-            relations_include = list(relations_include)
         for relation in mapper.relationships:
             if relation.key in relations_ignore\
                     or (relations_include is not None and relation.key not in relations_include):
