@@ -116,8 +116,6 @@ class AlchemyMixin(object):
 
     def serialize_relations(self, obj, data, relations_level=1, relations_ignore=None, relations_include=None):
         mapper = inspect(obj).mapper
-        relations_ignore = [] if relations_ignore is None else list(relations_ignore)
-        relations_ignore.append(mapper.class_)
         for relation in mapper.relationships:
             if relation.key in relations_ignore\
                     or (relations_include is not None and relation.key not in relations_include):
@@ -125,6 +123,9 @@ class AlchemyMixin(object):
             rel_obj = getattr(obj, relation.key)
             if rel_obj is None:
                 continue
+            relations_ignore = [] if relations_ignore is None else list(relations_ignore)
+            if relation.back_populates:
+                relations_ignore.append(relation.back_populates)
             if relation.direction == MANYTOONE:
                 data[relation.key] = self.serialize(rel_obj, relations_level=relations_level - 1,
                                                     relations_ignore=relations_ignore,
