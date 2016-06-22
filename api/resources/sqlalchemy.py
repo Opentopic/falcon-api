@@ -342,10 +342,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
     def get_queryset(self, req, resp, db_session=None):
         query = db_session.query(self.objects_class)
-        # can't use self.get_param_or_post() because it pops the param
-        if self.PARAM_RELATIONS in req.params:
-            relations = self.clean_relations(req.params[self.PARAM_RELATIONS])
-            query = query.options(subqueryload('*') if relations is None else subqueryload(*relations))
+        relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
+        query = query.options(subqueryload('*') if relations is None else subqueryload(*relations))
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if order:
             if not isinstance(order, list):
@@ -382,12 +380,12 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         if offset is not None:
             offset = int(offset)
         get_total = self.get_param_or_post(req, self.PARAM_TOTAL_COUNT)
+        # retrieve that param without removing it so self.get_queryset() so it can also use it
+        relations = self.clean_relations(req.params.get(self.PARAM_RELATIONS, ''))
 
         with session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
             total = self.get_total_objects(query) if get_total else None
-            # retrieve that param after calling self.get_queryset() so it can also use it
-            relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
 
             object_list = self.get_object_list(query, limit, offset)
 
