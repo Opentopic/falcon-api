@@ -242,7 +242,7 @@ class AlchemyMixin(object):
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
-                    raise HTTPBadRequest('Invalid attribute', 'Value of {} filter attribute is invalid'.format(token))
+                    raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
                 column_name = getattr(obj_class, token, None)
                 """:type column: sqlalchemy.schema.Column"""
                 column = mapper.columns[token]
@@ -285,7 +285,7 @@ class AlchemyMixin(object):
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
-                    raise HTTPBadRequest('Invalid attribute', 'Value of {} filter attribute is invalid'.format(token))
+                    raise HTTPBadRequest('Invalid attribute', 'Order attribute {} is invalid'.format(arg))
                 column_name = getattr(obj_class, token, None)
                 """:type column: sqlalchemy.schema.Column"""
                 column = mapper.columns[token]
@@ -342,7 +342,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
     def get_queryset(self, req, resp, db_session=None):
         query = db_session.query(self.objects_class)
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
-        query = query.options(subqueryload('*') if relations is None else subqueryload(*relations))
+        if relations is None or len(relations):
+            query = query.options(subqueryload('*') if relations is None else subqueryload(*relations))
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if order:
             if not isinstance(order, list):
