@@ -37,6 +37,8 @@ class AlchemyMixin(object):
     Provides serialize and deserialize methods to convert between JSON and SQLAlchemy datatypes.
     """
     MULTIVALUE_SEPARATOR = ','
+    PARAM_RELATIONS = 'relations'
+    PARAM_RELATIONS_ALL = '_all'
 
     _underscore_operators = {
         'exact':        operators.eq,
@@ -58,7 +60,8 @@ class AlchemyMixin(object):
         'day': lambda c, x: extract('day', c) == x
     }
 
-    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, relations_level=1, relations_ignore=None):
+    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, relations_level=1, relations_ignore=None,
+                  relations_include=None):
         """
         Converts the object to a serializable dictionary.
         :param obj: the object to serialize
@@ -72,8 +75,11 @@ class AlchemyMixin(object):
         :param relations_level: how many levels of relations to serialize
         :type relations_level: int
 
-        :param relations_ignore: relationship model classes to ignore
+        :param relations_ignore: relationship names to ignore
         :type relations_ignore: list
+
+        :param relations_include: relationship names to include
+        :type relations_include: list
 
         :return: a serializable dictionary
         :rtype: dict
@@ -83,7 +89,9 @@ class AlchemyMixin(object):
         if relations_level > 0:
             if relations_ignore is None:
                 relations_ignore = list(getattr(self, 'serialize_ignore', []))
-            data = self.serialize_relations(obj, data, relations_level, relations_ignore)
+            if relations_include is None:
+                relations_include = list(getattr(self, 'serialize_include', []))
+            data = self.serialize_relations(obj, data, relations_level, relations_ignore, relations_include)
         return data
 
     def serialize_columns(self, obj, data, skip_primary_key=False, skip_foreign_keys=False):
@@ -106,29 +114,32 @@ class AlchemyMixin(object):
             return float(value)
         return value
 
-    def serialize_relations(self, obj, data, relations_level=1, relations_ignore=None):
+    def serialize_relations(self, obj, data, relations_level=1, relations_ignore=None, relations_include=None):
         mapper = inspect(obj).mapper
         relations_ignore = [] if relations_ignore is None else list(relations_ignore)
         relations_ignore.append(mapper.class_)
+        if relations_include is not None:
+            relations_include = list(relations_include)
         for relation in mapper.relationships:
-            if relation.mapper.class_ in relations_ignore:
+            if relation.key in relations_ignore\
+                    or (relations_include is not None and relation.key not in relations_include):
                 continue
             rel_obj = getattr(obj, relation.key)
             if rel_obj is None:
                 continue
             if relation.direction == MANYTOONE:
-                data[relation.key] = self.serialize(rel_obj,
-                                                    relations_level=relations_level - 1,
-                                                    relations_ignore=relations_ignore)
+                data[relation.key] = self.serialize(rel_obj, relations_level=relations_level - 1,
+                                                    relations_ignore=relations_ignore,
+                                                    relations_include=relations_include)
             elif not relation.uselist:
-                data.update(self.serialize(rel_obj, skip_primary_key=True,
-                                           relations_level=relations_level - 1,
-                                           relations_ignore=relations_ignore))
+                data.update(self.serialize(rel_obj, skip_primary_key=True, relations_level=relations_level - 1,
+                                           relations_ignore=relations_ignore,
+                                           relations_include=relations_include))
             else:
                 data[relation.key] = {
-                    rel.id: self.serialize(rel, skip_primary_key=True,
-                                           relations_level=relations_level - 1,
-                                           relations_ignore=relations_ignore)
+                    rel.id: self.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1,
+                                           relations_ignore=relations_ignore,
+                                           relations_include=relations_include)
                     for rel in rel_obj
                 }
         return data
@@ -289,8 +300,35 @@ class AlchemyMixin(object):
             mapper = inspect(obj_class)
         return query
 
+    def clean_relations(self, relations):
+        """
+        Checks all special values in relations and makes sure to always return either a list or None.
+
+        :param relations: relation names
+        :type relations: str | list
+
+        :return: either a list (may be empty) or None if all relations should be included
+        :rtype: list | None
+        """
+        if relations == '':
+            return []
+        elif relations == self.PARAM_RELATIONS_ALL:
+            return None
+        elif isinstance(relations, str):
+            return [relations]
+
 
 class CollectionResource(AlchemyMixin, BaseCollectionResource):
+    """
+    Allows to fetch a collection of a resource (GET) and to create new resource in that collection (POST).
+    May be extended to allow batch operations (ex. PATCH).
+    When fetching a collection (GET), following params are supported:
+    * limit, offset - for pagination
+    * total_count - to calculate total number of items matching filters, without pagination
+    * relations - list of relation names to include in the result, uses special value `_all` for all relations
+    * all other params are treated as filters, syntax mimics Django filters, see `AlchemyMixin._underscore_operators`
+    User input can be validated by attaching the `falconjsonio.schema.request_schema()` decorator.
+    """
     VIOLATION_UNIQUE = '23505'
 
     def __init__(self, objects_class, db_engine, max_limit=None):
@@ -303,7 +341,11 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.db_engine = db_engine
 
     def get_queryset(self, req, resp, db_session=None):
-        query = db_session.query(self.objects_class).options(subqueryload('*'))
+        query = db_session.query(self.objects_class)
+        # can't use self.get_param_or_post() because it pops the param
+        if self.PARAM_RELATIONS in req.params:
+            relations = self.clean_relations(req.params[self.PARAM_RELATIONS])
+            query = query.options(subqueryload('*') if relations is None else subqueryload(*relations))
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if order:
             if not isinstance(order, list):
@@ -344,10 +386,12 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         with session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
             total = self.get_total_objects(query) if get_total else None
+            # retrieve that param after calling self.get_queryset() so it can also use it
+            relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
 
             object_list = self.get_object_list(query, limit, offset)
 
-            serialized = [self.serialize(obj) for obj in object_list]
+            serialized = [self.serialize(obj, relations_include=relations) for obj in object_list]
             result = {
                 'results': serialized,
                 'total': total,
@@ -357,6 +401,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.render_response(result, req, resp)
 
     def create(self, req, resp, data):
+        relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         try:
             with session_scope(self.db_engine) as db_session:
                 # replace any relations with objects instead of pks
@@ -376,7 +421,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                 resource = self.objects_class(**data)
                 db_session.add(resource)
                 db_session.commit()
-                return self.serialize(resource)
+                return self.serialize(resource, relations_include=relations)
         except (IntegrityError, ProgrammingError) as err:
             # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
             # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
@@ -387,6 +432,12 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
 
 class SingleResource(AlchemyMixin, BaseSingleResource):
+    """
+    Allows to fetch a single resource (GET) and to update (PATCH, PUT) or remove it (DELETE).
+    When fetching a resource (GET), following params are supported:
+    * relations - list of relation names to include in the result, uses special value `_all` for all relations
+    User input can be validated by attaching the `falconjsonio.schema.request_schema()` decorator.
+    """
     VIOLATION_FOREIGN_KEY = '23503'
 
     def __init__(self, objects_class, db_engine):
@@ -416,11 +467,12 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         return obj
 
     def on_get(self, req, resp, *args, **kwargs):
+        relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         with session_scope(self.db_engine) as db_session:
             obj = self.get_object(req, resp, kwargs, db_session)
 
             result = {
-                'results': self.serialize(obj),
+                'results': self.serialize(obj, relations_include=relations),
             }
 
         self.render_response(result, req, resp)
@@ -441,11 +493,12 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         self.render_response({}, req, resp)
 
     def update(self, req, resp, data, obj, db_session=None):
+        relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         for key, value in data.items():
             setattr(obj, key, value)
         db_session.add(obj)
         db_session.commit()
-        return self.serialize(obj)
+        return self.serialize(obj, relations_include=relations)
 
     def on_put(self, req, resp, *args, **kwargs):
         status_code = falcon.HTTP_OK
