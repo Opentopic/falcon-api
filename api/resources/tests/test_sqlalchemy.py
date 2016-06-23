@@ -79,9 +79,7 @@ WHERE some_table.name = ? AND some_table.id >= ?"""),
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
 JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id %0A
-JOIN m2m_table AS m2m_table_2 ON some_table.id = m2m_table_2.model_id %0A
-JOIN other_table AS other_table_2 ON other_table_2.id = m2m_table_2.other_model_id %0A
-JOIN third_table AS third_table_1 ON other_table_2.id = third_table_1.other_model_id %20
+JOIN third_table AS third_table_1 ON other_table_1.id = third_table_1.other_model_id %20
 WHERE other_table_1.name = ? AND third_table_1.name = ?"""),
     ("""{"or": {"name": "value",
                  "id": 20}}""",
@@ -94,10 +92,24 @@ WHERE some_table.name = ? OR some_table.id = ?"""),
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
 JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id %0A
-JOIN m2m_table AS m2m_table_2 ON some_table.id = m2m_table_2.model_id %0A
-JOIN other_table AS other_table_2 ON other_table_2.id = m2m_table_2.other_model_id %0A
-JOIN third_table AS third_table_1 ON other_table_2.id = third_table_1.other_model_id %20
+JOIN third_table AS third_table_1 ON other_table_1.id = third_table_1.other_model_id %20
 WHERE other_table_1.name = ? OR third_table_1.name = ?"""),
+    ("""{"or": [{"name": "value",
+                  "id": 20},
+                {"name": "value2",
+                  "id": 10},
+                {"and": {"name": "value3",
+                         "id": 0}}]}""",
+     """SELECT some_table.id, some_table.name %20
+FROM some_table %20
+WHERE some_table.name = ? AND some_table.id = ? OR some_table.name = ? AND some_table.id = ? OR some_table.name = ? AND some_table.id = ?"""),  # noqa
+    ("""{"and": [{"or": {"name": "value",
+                         "id": 20}},
+                 {"or": {"name": "value3",
+                         "id": 0}}]}""",
+     """SELECT some_table.id, some_table.name %20
+FROM some_table %20
+WHERE (some_table.name = ? OR some_table.id = ?) AND (some_table.name = ? OR some_table.id = ?)"""),
 ])
 def query(request):
     return request.param

@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
+from sqlalchemy.sql.expression import and_, or_, not_
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
@@ -61,9 +62,9 @@ class AlchemyMixin(object):
         'day': lambda c, x: extract('day', c) == x
     }
     _logical_operators = {
-        'or': operators.or_,
-        'and': operators.and_,
-        'not': operators.inv,
+        'or': or_,
+        'and': and_,
+        'not': not_,
     }
 
     def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, relations_level=1, relations_ignore=None,
@@ -226,23 +227,65 @@ class AlchemyMixin(object):
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
+        relationships = {
+            'aliases': {},
+            'join_chains': [],
+        }
+        expressions = self._build_filter_expressions(conditions, default_op, relationships)
+        longest_chains = []
+        for chain_a, chain_a_ext in relationships['join_chains']:
+            is_longest = True
+            for chain_b, chain_b_ext in relationships['join_chains']:
+                if chain_a == chain_b:
+                    continue
+                if set(chain_a).issubset(chain_b):
+                    is_longest = False
+                    continue
+            if is_longest:
+                longest_chains.append(chain_a_ext)
+        if longest_chains:
+            query = query.distinct()
+            for chain in longest_chains:
+                for alias, relation in chain:
+                    query = query.join((alias, relation), from_joinpoint=True)
+                query = query.reset_joinpoint()
+        if expressions is not None:
+            query = query.filter(expressions)
+        return query
+
+    def _build_filter_expressions(self, conditions, default_op, relationships):
         column = None
         column_name = None
         obj_class = self.objects_class
         mapper = inspect(obj_class)
         column_alias = None
+        join_chain = []
+        join_chain_ext = []
 
         if default_op is None:
-            default_op = operators.and_
+            default_op = and_
 
-        aliases = {}
         expressions = []
 
         for arg, value in conditions.items():
             if arg in self._logical_operators:
+                op = self._logical_operators[arg]
+                if isinstance(value, list):
+                    parts = []
+                    for subconditions in value:
+                        if not isinstance(subconditions, dict):
+                            raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+                        subexpressions = self._build_filter_expressions(subconditions, and_, relationships)
+                        parts.append(subexpressions)
+                    if len(parts) > 1:
+                        expressions.append(op(*parts) if op != not_ else not_(and_(*parts)))
+                    elif len(parts) == 1:
+                        expressions.append(parts[0] if op != not_ else not_(parts[0]))
+                    continue
                 if not isinstance(value, dict):
                     raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                query = self._filter_or_exclude(query, value, self._logical_operators[arg])
+                subexpressions = self._build_filter_expressions(value, self._logical_operators[arg], relationships)
+                expressions.append(subexpressions)
                 continue
             for token in arg.split('__'):
                 if column_name is not None and token in self._underscore_operators:
@@ -264,8 +307,9 @@ class AlchemyMixin(object):
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
                     mapper = mapper.relationships[token].mapper
-                    column_alias = aliased(obj_class, name=self.next_alias(aliases, mapper.local_table.name))
-                    query = query.distinct().join(column_alias, token, from_joinpoint=True)
+                    column_alias, is_new_alias = self.next_alias(relationships['aliases'], mapper.local_table.name, obj_class)
+                    join_chain.append(token)
+                    join_chain_ext.append((column_alias, token))
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
@@ -278,22 +322,35 @@ class AlchemyMixin(object):
                 # if it was a relation it's just going to be ignored
                 value = self.deserialize_column(column, value)
                 expressions.append(operators.eq(column_name, value))
-            query = query.reset_joinpoint()
             # reset everything back to main object
             column_name = None
             obj_class = self.objects_class
             mapper = inspect(obj_class)
             column_alias = None
-        if len(expressions) > 1 or default_op == operators.inv:
-            return query.filter(default_op(*expressions))
+            if join_chain:
+                relationships['join_chains'].append((join_chain, join_chain_ext))
+                join_chain = []
+                join_chain_ext = []
+        result = None
+        if len(expressions) > 1:
+            result = default_op(*expressions) if default_op != not_ else and_(*expressions)
         elif len(expressions) == 1:
-            return query.filter(expressions[0])
-        return query
+            result = expressions[0]
+        return result if default_op != not_ else not_(result)
 
     @staticmethod
-    def next_alias(aliases, name):
-        aliases[name] = (aliases[name] if name in aliases else 0) + 1
-        return name + '_' + str(aliases[name])
+    def next_alias(aliases, name, obj_class, use_existing=True):
+        is_new = True
+        if name in aliases:
+            if use_existing:
+                is_new = False
+            else:
+                aliases[name]['number'] += 1
+                aliases[name]['aliased'].append(aliased(obj_class, name=name + '_' + str(aliases[name]['number'])))
+        else:
+            aliases[name] = {'number': 1,
+                             'aliased': [aliased(obj_class, name=name + '_1')]}
+        return aliases[name]['aliased'][-1], is_new
 
     def order_by(self, query, *args):
         """
