@@ -6,11 +6,12 @@ from api.resources.base import BaseCollectionResource, BaseSingleResource
 class CollectionResource(BaseCollectionResource):
     def get_queryset(self, req, resp):
         order = self.get_param_or_post(req, self.PARAM_ORDER)
-        if '__raw__' in req.params:
+        if self.PARAM_SEARCH in req.params:
             try:
-                req.params['__raw__'] = json.loads(req.params['__raw__'])
+                req.params['__raw__'] = json.loads(req.params.pop(self.PARAM_SEARCH))
             except ValueError:
-                raise HTTPBadRequest('Invalid attribute', 'Value of {} filter attribute is invalid'.format('__raw__'))
+                raise HTTPBadRequest('Invalid attribute',
+                                     'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
 
         queryset = self.objects_class.objects(**req.params)
         if order:

@@ -3,10 +3,11 @@ from datetime import datetime, time
 from decimal import Decimal
 
 import falcon
+import json
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
 from sqlalchemy import inspect, func
 from sqlalchemy.exc import IntegrityError, ProgrammingError
-from sqlalchemy.orm import sessionmaker, subqueryload
+from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
@@ -58,6 +59,11 @@ class AlchemyMixin(object):
         'year': lambda c, x: extract('year', c) == x,
         'month': lambda c, x: extract('month', c) == x,
         'day': lambda c, x: extract('day', c) == x
+    }
+    _logical_operators = {
+        'or': operators.or_,
+        'and': operators.and_,
+        'not': operators.inv,
     }
 
     def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, relations_level=1, relations_ignore=None,
@@ -180,45 +186,64 @@ class AlchemyMixin(object):
             return float(value)
         return value
 
-    def filter_by(self, query, **kwargs):
+    def filter_by(self, query, conditions):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
 
+        :param conditions: conditions dictionary
+        :type conditions: dict
+
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
-        return self._filter_or_exclude(query, False, **kwargs)
+        return self._filter_or_exclude(query, conditions)
 
-    def exclude_by(self, query, **kwargs):
+    def exclude_by(self, query, conditions):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
 
+        :param conditions: conditions dictionary
+        :type conditions: dict
+
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
-        return self._filter_or_exclude(query, True, **kwargs)
+        return self._filter_or_exclude(query, {'not': {'and': conditions}})
 
-    def _filter_or_exclude(self, query, negate, **kwargs):
+    def _filter_or_exclude(self, query, conditions, default_op=None):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
 
-        :param negate: should the filter expressions be negated
-        :type negate: bool
+        :param conditions: conditions dictionary
+        :type conditions: dict
+
+        :param default_op: a default operator to join all filter expressions
+        :type default_op: function
 
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
-        def negate_if(expr):
-            return expr if not negate else ~expr
         column = None
         column_name = None
         obj_class = self.objects_class
         mapper = inspect(obj_class)
+        column_alias = None
 
-        for arg, value in kwargs.items():
+        if default_op is None:
+            default_op = operators.and_
+
+        aliases = {}
+        expressions = []
+
+        for arg, value in conditions.items():
+            if arg in self._logical_operators:
+                if not isinstance(value, dict):
+                    raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+                query = self._filter_or_exclude(query, value, self._logical_operators[arg])
+                continue
             for token in arg.split('__'):
                 if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
@@ -228,35 +253,47 @@ class AlchemyMixin(object):
                         value = list(map(lambda x: self.deserialize_column(column, x), value))
                     else:
                         value = self.deserialize_column(column, value)
-                    query = query.filter(negate_if(op(column_name, value)))
+                    expressions.append(op(column_name, value))
                     # reset column, obj_class and mapper back to main object
                     column_name = None
                     obj_class = self.objects_class
                     mapper = inspect(obj_class)
+                    column_alias = None
                     continue
                 if token in mapper.relationships:
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
                     mapper = mapper.relationships[token].mapper
-                    query = query.distinct().join(token, aliased=True, from_joinpoint=True)
+                    column_alias = aliased(obj_class, name=self.next_alias(aliases, mapper.local_table.name))
+                    query = query.distinct().join(column_alias, token, from_joinpoint=True)
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
                     raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                column_name = getattr(obj_class, token, None)
+                column_name = getattr(obj_class if column_alias is None else column_alias, token)
                 """:type column: sqlalchemy.schema.Column"""
                 column = mapper.columns[token]
             if column_name is not None:
                 # if last token was a column, not an op, assume it's equality
                 # if it was a relation it's just going to be ignored
                 value = self.deserialize_column(column, value)
-                query = query.filter(negate_if(column_name == value))
+                expressions.append(operators.eq(column_name, value))
             query = query.reset_joinpoint()
             # reset everything back to main object
             column_name = None
             obj_class = self.objects_class
             mapper = inspect(obj_class)
+            column_alias = None
+        if len(expressions) > 1 or default_op == operators.inv:
+            return query.filter(default_op(*expressions))
+        elif len(expressions) == 1:
+            return query.filter(expressions[0])
         return query
+
+    @staticmethod
+    def next_alias(aliases, name):
+        aliases[name] = (aliases[name] if name in aliases else 0) + 1
+        return name + '_' + str(aliases[name])
 
     def order_by(self, query, *args):
         """
@@ -352,7 +389,13 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         else:
             primary_keys = inspect(self.objects_class).primary_key
             query = query.order_by(*primary_keys)
-        return self.filter_by(query, **req.params)
+        if self.PARAM_SEARCH in req.params:
+            try:
+                req.params.update(json.loads(req.params.pop(self.PARAM_SEARCH)))
+            except ValueError:
+                raise HTTPBadRequest('Invalid attribute',
+                                     'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
+        return self.filter_by(query, req.params)
 
     def get_total_objects(self, queryset):
         primary_keys = inspect(self.objects_class).primary_key
@@ -457,7 +500,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         conditions = dict(req.params)
         if self.PARAM_RELATIONS in conditions:
             conditions.pop(self.PARAM_RELATIONS)
-        query = self.filter_by(query, **conditions)
+        query = self.filter_by(query, conditions)
 
         try:
             obj = query.one()
