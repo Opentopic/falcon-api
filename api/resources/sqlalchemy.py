@@ -454,7 +454,10 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
             attr = getattr(self.objects_class, key, None)
             query = query.filter(attr == value)
 
-        query = self.filter_by(query, **req.params)
+        conditions = dict(req.params)
+        if self.PARAM_RELATIONS in conditions:
+            conditions.pop(self.PARAM_RELATIONS)
+        query = self.filter_by(query, **conditions)
 
         try:
             obj = query.one()
