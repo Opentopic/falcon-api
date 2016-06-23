@@ -235,22 +235,13 @@ class AlchemyMixin(object):
         if default_op is None:
             default_op = operators.and_
 
-        """
-        TODO: process value recursively:
-        * start with and_
-        * if arg is a bool op, value must be a dict, recursively return filters list
-        *
-        examples:
-        {'arg': 'value'}
-        {'arg': ['many', 'values']}
-        {'or':{'first_arg': 'value', 'second_arg': ['many', 'values']}}
-        {'or':{'and':{'first_arg': 'value', 'second_arg': 'value'}}, 'third_arg': ['many', 'values']}}
-        """
         aliases = {}
         expressions = []
 
         for arg, value in conditions.items():
             if arg in self._logical_operators:
+                if not isinstance(value, dict):
+                    raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
                 query = self._filter_or_exclude(query, value, self._logical_operators[arg])
                 continue
             for token in arg.split('__'):
