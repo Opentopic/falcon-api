@@ -56,6 +56,7 @@ def engine():
 def session(request, engine):
     from sqlalchemy.orm import Session
     session = Session(engine)
+
     def fin():
         session.close()
     request.addfinalizer(fin)
