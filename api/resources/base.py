@@ -119,6 +119,7 @@ class BaseCollectionResource(BaseResource):
     PARAM_OFFSET = 'offset'
     PARAM_ORDER = 'order'
     PARAM_TOTAL_COUNT = 'total_count'
+    PARAM_SEARCH = 'search'
 
     def __init__(self, objects_class, max_limit=None):
         """
