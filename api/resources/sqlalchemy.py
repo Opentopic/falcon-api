@@ -150,26 +150,49 @@ class AlchemyMixin(object):
                 }
         return data
 
-    def deserialize(self, data):
+    def deserialize(self, data, mapper=None):
+        """
+        Converts incoming data to internal types. Detects relation objects. Moves one to one relation attributes
+        to a separate key. Silently skips unknown attributes.
+
+        :param data: incoming data
+        :type data: dict
+
+        :param mapper: mapper, if None, mapper of the main object class will be used
+        :type mapper: sqlalchemy.orm.mapper.Mapper
+
+        :return: data with correct types
+        :rtype: dict
+        """
         attributes = {}
 
         if data is None:
             return attributes
 
-        mapper = inspect(self.objects_class)
+        if mapper is None:
+            mapper = inspect(self.objects_class)
         for key, value in data.items():
             if key in mapper.relationships:
-                if isinstance(value, str):
+                if isinstance(value, dict):
+                    attributes[key] = self.deserialize(value, mapper.relationships[key].mapper)
+                elif isinstance(value, list):
                     attributes[key] = []
-                    for v in value.split(','):
-                        try:
-                            attributes[key].push(int(v))
-                        except ValueError:
-                            pass
+                    for item in value:
+                        if isinstance(item, dict):
+                            attributes[key].append(self.deserialize(item, mapper.relationships[key].mapper))
+                        else:
+                            attributes[key].append(item)
                 else:
                     attributes[key] = value
             elif key in mapper.columns:
                 attributes[key] = self.deserialize_column(mapper.columns[key], value)
+            else:
+                for relation in mapper.relationships:
+                    if relation.direction == MANYTOONE or relation.uselist or key not in relation.mapper.columns:
+                        continue
+                    if relation.key not in attributes:
+                        attributes[relation.key] = []
+                    attributes[relation.key].append(self.deserialize_column(relation.mapper.columns[key], value))
 
         return attributes
 
@@ -410,6 +433,35 @@ class AlchemyMixin(object):
             return None
         elif isinstance(relations, str):
             return [relations]
+
+    def save_resource(self, obj, data, db_session):
+        """
+        A helper method called from collection create and single resource update.
+
+        :param obj: a new or existing model
+        :type obj: object
+
+        :param data: data to assign to the model and/or its relations
+        :type data: dict
+
+        :param db_session: SQLAlchemy session
+        :type db_session: sqlalchemy.orm.session.Session
+        """
+        mapper = inspect(obj).mapper
+        for key, value in data.items():
+            if key not in mapper.relationships:
+                continue
+            related_mapper = mapper.relationships[key].mapper
+            if isinstance(value, list):
+                # TODO: values can be either dicts or scalars
+                expression = related_mapper.primary_key[0].in_(value)
+                data[key] = db_session.query(related_mapper.class_).filter(expression).all()
+            else:
+                # TODO: value can be either a dict or scalar
+                # TODO: implement get (with update) or create, possibly with optimistic locking support
+                # TODO: require and verify version number, possibly earlier
+                expression = related_mapper.primary_key[0].__eq__(value)
+                data[key] = db_session.query(related_mapper.class_).filter(expression).first()
 
 
 class CollectionResource(AlchemyMixin, BaseCollectionResource):
