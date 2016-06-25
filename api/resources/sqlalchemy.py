@@ -712,6 +712,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         try:
             with session_scope(self.db_engine) as db_session:
                 resource = self.save_resource(self.objects_class(), data, db_session)
+                db_session.commit()
                 return self.serialize(resource, relations_include=relations)
         except (IntegrityError, ProgrammingError) as err:
             # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
@@ -793,6 +794,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
     def update(self, req, resp, data, obj, db_session=None):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         resource = self.save_resource(obj, data, db_session)
+        db_session.commit()
         return self.serialize(resource, relations_include=relations)
 
     def on_put(self, req, resp, *args, **kwargs):
