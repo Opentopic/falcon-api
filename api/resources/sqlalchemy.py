@@ -600,18 +600,8 @@ class AlchemyMixin(object):
         schema = {
             'type': 'object',
             'properties': {
-                #'url': {'type': 'string', 'format': 'uri'},
-                #'host': {'type': 'integer'},
-                #'relation': {
-                #    'type': 'array',
-                #    'items': {'type': 'integer'},
-                #    'minItems': 1,
-                #    'uniqueItems': True,
-                #},
             },
-            #'required': ['url', 'host', 'article_sources'],
         }
-        # TODO: if optimistic locking is supported, require the version param
         if method == 'POST':
             schema['required'] = []
         return schema
