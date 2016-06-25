@@ -49,7 +49,7 @@ class ThirdModel(Base):
 @pytest.fixture()
 def engine():
     from sqlalchemy import create_engine
-    return create_engine('sqlite:///:memory:')
+    return create_engine('sqlite:///:memory:', echo=True)
 
 
 @pytest.fixture()
@@ -284,3 +284,34 @@ def test_save_resource(session):
     assert existing_model.other_models[1].name == data['other_models'][1]['name']
     assert existing_model.other_models[0].third_models[0].name == data['other_models'][0]['third_models'][0]['name']
     assert existing_model.other_models[0].third_models[1].name == data['other_models'][0]['third_models'][1]['name']
+
+
+def test_update_resource(model, session):
+    # save the example model to the db
+    session.add(model)
+    session.commit()
+    # update it so some related models should be added, updated and removed
+    alchemy = AlchemyMixin()
+    data = {
+        'name': 'model_prim',
+        'other_models': [
+            {
+                'id': 2,
+                'name': 'other_model1_prim',
+                # missing third_models, should be left intact
+            },
+            # missing other_model with id 3, should be removed
+            {
+                # new other_model, should be added
+                'name': 'other_model3',
+            },
+        ],
+    }
+    alchemy.save_resource(model, data, session)
+    session.commit()
+    model = session.query(Model).get(1)
+    assert model.name == 'model_prim'
+    assert len(model.other_models) == 2
+    assert model.other_models[0].name == 'other_model1_prim'
+    assert model.other_models[1].id == 4
+    assert model.other_models[1].name == 'other_model3'

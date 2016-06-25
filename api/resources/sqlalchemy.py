@@ -471,28 +471,38 @@ class AlchemyMixin(object):
                 attributes[key] = value
                 continue
             related_mapper = mapper.relationships[key].mapper
+            pk = related_mapper.primary_key[0].name
             if isinstance(value, list):
                 keys = []
-                objects = []
+                objects = getattr(obj, key)
+                reindexed = {getattr(related, pk): index for index, related in enumerate(objects)}
                 for item in value:
                     if isinstance(item, dict):
-                        pass
-                        objects.append(AlchemyMixin.update_or_create(db_session, related_mapper, item))
+                        if pk in item and item[pk] in reindexed:
+                            AlchemyMixin.save_resource(objects[reindexed[item[pk]]], item, db_session)
+                            reindexed.pop(item[pk])
+                        else:
+                            objects.append(AlchemyMixin.update_or_create(db_session, related_mapper, item))
                     else:
-                        keys.append(item)
+                        if item in reindexed:
+                            reindexed.pop(item)
+                        else:
+                            keys.append(item)
+                for index in reindexed.values():
+                    del objects[index]
                 if keys:
                     expression = related_mapper.primary_key[0].in_(keys)
                     objects += db_session.query(related_mapper.class_).filter(expression).all()
-                if objects:
-                    setattr(obj, key, objects)
             else:
+                rel_obj = getattr(obj, key)
                 if isinstance(value, dict):
-                    pass
-                    rel_obj = AlchemyMixin.update_or_create(db_session, related_mapper, value)
-                else:
+                    if pk not in value or rel_obj is None:
+                        setattr(obj, key, AlchemyMixin.update_or_create(db_session, related_mapper, value))
+                    else:
+                        AlchemyMixin.save_resource(rel_obj, value, db_session)
+                elif getattr(rel_obj, pk) != value:
                     expression = related_mapper.primary_key[0].__eq__(value)
-                    rel_obj = db_session.query(related_mapper.class_).filter(expression).first()
-                setattr(obj, key, rel_obj)
+                    setattr(obj, key, db_session.query(related_mapper.class_).filter(expression).first())
         # now save the main object
         for key, value in attributes.items():
             if getattr(obj, key) != value:
@@ -525,7 +535,9 @@ class AlchemyMixin(object):
             obj = db_session.query(mapper.class_).get(query_attrs[0] if len(query_attrs) == 1 else tuple(query_attrs))
         else:
             obj = mapper.class_()
-        return AlchemyMixin.save_resource(obj, attributes, db_session)
+        if attributes:
+            return AlchemyMixin.save_resource(obj, attributes, db_session)
+        return obj
 
     @staticmethod
     def get_or_create(db_session, model_class, query_attrs, update_attrs=None, update_existing=False):
