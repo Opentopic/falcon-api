@@ -185,7 +185,7 @@ class AlchemyMixin(object):
                 if isinstance(value, dict) and all(is_int(pk) for pk in value.keys()):
                     replacement = []
                     for pk, attrs in value.items():
-                        attrs[rel_mapper.primary_key[0]] = pk
+                        attrs[rel_mapper.primary_key[0].name] = pk
                         replacement.append(attrs)
                     value = replacement
                 if isinstance(value, dict):
@@ -494,7 +494,7 @@ class AlchemyMixin(object):
                     rel_obj = db_session.query(related_mapper.class_).filter(expression).first()
                 setattr(obj, key, rel_obj)
         # now save the main object
-        for key, value in attributes:
+        for key, value in attributes.items():
             if getattr(obj, key) != value:
                 setattr(obj, key, value)
         db_session.add(obj)
@@ -579,7 +579,8 @@ class AlchemyMixin(object):
             return existing, False
         return new_object, True
 
-    def get_default_schema(self, method='POST'):
+    @staticmethod
+    def get_default_schema(model_class, method='POST'):
         """
         Returns a schema to be used in falconjsonio.schema.request_schema decorator
         :return:
@@ -627,7 +628,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.db_engine = db_engine
         if not hasattr(self, '__request_schemas__'):
             self.__request_schemas__ = {}
-        self.__request_schemas__['POST'] = self.get_default_schema('POST')
+        self.__request_schemas__['POST'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
 
     def get_queryset(self, req, resp, db_session=None):
         query = db_session.query(self.objects_class)
@@ -698,23 +699,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         try:
             with session_scope(self.db_engine) as db_session:
-                # replace any relations with objects instead of pks
-                mapper = inspect(self.objects_class)
-                for key, value in data.items():
-                    if key not in mapper.relationships:
-                        continue
-                    related_mapper = mapper.relationships[key].mapper
-                    if isinstance(value, list):
-                        expression = related_mapper.primary_key[0].in_(value)
-                        data[key] = db_session.query(related_mapper.class_).filter(expression).all()
-                    else:
-                        expression = related_mapper.primary_key[0].__eq__(value)
-                        data[key] = db_session.query(related_mapper.class_).filter(expression).first()
-
-                # create and save the object
-                resource = self.objects_class(**data)
-                db_session.add(resource)
-                db_session.commit()
+                resource = self.save_resource(self.objects_class(), data, db_session)
                 return self.serialize(resource, relations_include=relations)
         except (IntegrityError, ProgrammingError) as err:
             # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
@@ -744,8 +729,8 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         self.db_engine = db_engine
         if not hasattr(self, '__request_schemas__'):
             self.__request_schemas__ = {}
-        self.__request_schemas__['POST'] = self.get_default_schema('POST')
-        self.__request_schemas__['PUT'] = self.get_default_schema('POST')
+        self.__request_schemas__['POST'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
+        self.__request_schemas__['PUT'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
 
     def get_object(self, req, resp, path_params, db_session=None):
         query = db_session.query(self.objects_class)
@@ -795,11 +780,8 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
 
     def update(self, req, resp, data, obj, db_session=None):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
-        for key, value in data.items():
-            setattr(obj, key, value)
-        db_session.add(obj)
-        db_session.commit()
-        return self.serialize(obj, relations_include=relations)
+        resource = self.save_resource(obj, data, db_session)
+        return self.serialize(resource, relations_include=relations)
 
     def on_put(self, req, resp, *args, **kwargs):
         status_code = falcon.HTTP_OK

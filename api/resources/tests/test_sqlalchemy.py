@@ -6,7 +6,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, ForeignKey, Table
 from sqlalchemy.orm import relationship
 
-from api.resources.sqlalchemy import CollectionResource
+from api.resources.sqlalchemy import CollectionResource, AlchemyMixin
 
 Base = declarative_base()
 
@@ -56,8 +56,10 @@ def engine():
 def session(request, engine):
     from sqlalchemy.orm import Session
     session = Session(engine)
+    Base.metadata.create_all(engine)
 
     def fin():
+        Base.metadata.drop_all(engine)
         session.close()
     request.addfinalizer(fin)
     return session
@@ -111,17 +113,174 @@ WHERE some_table.name = ? AND some_table.id = ? OR some_table.name = ? AND some_
 FROM some_table %20
 WHERE (some_table.name = ? OR some_table.id = ?) AND (some_table.name = ? OR some_table.id = ?)"""),
 ])
-def query(request):
+def query_filtered(request):
     return request.param
 
 
-def test_filter_by(engine, session, query):
+@pytest.fixture()
+def model():
+    model1 = Model()
+    model1.id = 1
+    model1.name = 'model'
+    other_model1 = OtherModel()
+    other_model1.id = 2
+    other_model1.name = 'other_model1'
+    other_model2 = OtherModel()
+    other_model2.id = 3
+    other_model2.name = 'other_model2'
+    third_model1 = ThirdModel()
+    third_model1.id = 4
+    third_model1.name = 'third_model1'
+    third_model2 = ThirdModel()
+    third_model2.id = 5
+    third_model2.name = 'third_model2'
+    other_model1.third_models = [third_model1, third_model2]
+    model1.other_models = [other_model1, other_model2]
+    return model1
+
+
+def test_filter_by(engine, session, query_filtered):
     """
     Test `get_object` func
     """
-    conditions, expected = query
+    conditions, expected = query_filtered
     if isinstance(conditions, str):
         conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
     c = CollectionResource(objects_class=Model, db_engine=engine)
     query_obj = c._filter_or_exclude(session.query(Model), conditions)
     assert str(query_obj.statement.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
+
+
+def test_order_by(engine, session):
+    """
+    Test `get_object` func
+    """
+    c = CollectionResource(objects_class=Model, db_engine=engine)
+    query_obj = c.order_by(session.query(Model), '-name', 'id')
+    expected = """SELECT some_table.id, some_table.name %20
+FROM some_table %0A
+ORDER BY some_table.name DESC, some_table.id"""
+    assert str(query_obj.statement.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
+
+
+def test_serialize(model):
+    alchemy = AlchemyMixin()
+    expected = {
+        'id': 1,
+        'name': 'model',
+        'other_models': {
+            2: {
+                'name': 'other_model1',
+            },
+            3: {
+                'name': 'other_model2',
+            },
+        },
+    }
+    assert alchemy.serialize(model) == expected
+
+
+def test_serialize_deep(model):
+    alchemy = AlchemyMixin()
+    expected = {
+        'id': 1,
+        'name': 'model',
+        'other_models': {
+            2: {
+                'name': 'other_model1',
+                'third_models': {
+                    4: {
+                        'name': 'third_model1',
+                        'other_model_id': None,
+                    },
+                    5: {
+                        'name': 'third_model2',
+                        'other_model_id': None,
+                    },
+                },
+            },
+            3: {
+                'name': 'other_model2',
+                'third_models': {}
+            },
+        },
+    }
+    assert alchemy.serialize(model, relations_level=2) == expected
+
+
+def test_deserialize(model):
+    alchemy = AlchemyMixin()
+    alchemy.objects_class = Model
+    data = {
+        'id': 1,
+        'name': 'model',
+        'other_models': {
+            2: {
+                'name': 'other_model1',
+            },
+            3: {
+                'name': 'other_model2',
+            },
+        },
+    }
+    expected = {
+        'id': 1,
+        'name': 'model',
+        'other_models': [
+            {
+                'id': 2,
+                'name': 'other_model1',
+            },
+            {
+                'id': 3,
+                'name': 'other_model2',
+            },
+        ],
+    }
+    assert alchemy.deserialize(data) == expected
+
+
+def test_default_schema():
+    expected = {
+        'type': 'object',
+        'properties': {},
+        'required': [],
+    }
+    assert AlchemyMixin.get_default_schema(Model, 'POST') == expected
+    expected = {
+        'type': 'object',
+        'properties': {},
+        'required': [],
+    }
+    assert AlchemyMixin.get_default_schema(ThirdModel, 'POST') == expected
+
+
+def test_save_resource(session):
+    alchemy = AlchemyMixin()
+    data = {
+        'name': 'model',
+        'other_models': [
+            {
+                'name': 'other_model1',
+                'third_models': [
+                    {
+                        'name': 'third_model1',
+                    },
+                    {
+                        'name': 'third_model2',
+                    },
+                ],
+            },
+            {
+                'name': 'other_model2',
+            },
+        ],
+    }
+    new_model = Model()
+    alchemy.save_resource(new_model, data, session)
+    existing_model = session.query(Model).filter(Model.name == 'model').first()
+    assert existing_model.name == data['name']
+    assert existing_model.other_models[0].name == data['other_models'][0]['name']
+    assert existing_model.other_models[1].name == data['other_models'][1]['name']
+    assert existing_model.other_models[0].third_models[0].name == data['other_models'][0]['third_models'][0]['name']
+    assert existing_model.other_models[0].third_models[1].name == data['other_models'][0]['third_models'][1]['name']
