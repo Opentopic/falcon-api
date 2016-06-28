@@ -503,7 +503,7 @@ class AlchemyMixin(object):
                         setattr(obj, key, AlchemyMixin.update_or_create(db_session, related_mapper, value))
                     else:
                         AlchemyMixin.save_resource(rel_obj, value, db_session)
-                elif getattr(rel_obj, pk) != value:
+                elif rel_obj is None or getattr(rel_obj, pk) != value:
                     expression = related_mapper.primary_key[0].__eq__(value)
                     setattr(obj, key, db_session.query(related_mapper.class_).filter(expression).first())
         # now save the main object
