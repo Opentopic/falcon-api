@@ -466,12 +466,17 @@ class AlchemyMixin(object):
         :param db_session: SQLAlchemy session
         :type db_session: sqlalchemy.orm.session.Session
         """
+        # fetching related objects should not trigger saving of main object,
+        # because FKs could not have been set yet
+        autoflush = db_session.autoflush
+        db_session.autoflush = False
         mapper = inspect(obj).mapper
-        attributes = {}
-        # first save all relations to avoid assigning dicts as model attributes
+        for key, value in data.items():
+            if key not in mapper.relationships and getattr(obj, key) != value:
+                setattr(obj, key, value)
+        db_session.add(obj)
         for key, value in data.items():
             if key not in mapper.relationships:
-                attributes[key] = value
                 continue
             related_mapper = mapper.relationships[key].mapper
             pk = related_mapper.primary_key[0].name
@@ -506,11 +511,7 @@ class AlchemyMixin(object):
                 elif rel_obj is None or getattr(rel_obj, pk) != value:
                     expression = related_mapper.primary_key[0].__eq__(value)
                     setattr(obj, key, db_session.query(related_mapper.class_).filter(expression).first())
-        # now save the main object
-        for key, value in attributes.items():
-            if getattr(obj, key) != value:
-                setattr(obj, key, value)
-        db_session.add(obj)
+        db_session.autoflush = autoflush
         return obj
 
     @staticmethod
