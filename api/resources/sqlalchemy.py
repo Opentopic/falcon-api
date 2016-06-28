@@ -12,6 +12,7 @@ from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
 from sqlalchemy.sql.expression import and_, or_, not_
+from sqlalchemy.sql.functions import Function
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
@@ -59,7 +60,8 @@ class AlchemyMixin(object):
         'isnull': lambda c, x: x and c is not None or c is None,
         'year': lambda c, x: extract('year', c) == x,
         'month': lambda c, x: extract('month', c) == x,
-        'day': lambda c, x: extract('day', c) == x
+        'day': lambda c, x: extract('day', c) == x,
+        'func': Function,
     }
     _logical_operators = {
         'or': or_,
@@ -150,26 +152,64 @@ class AlchemyMixin(object):
                 }
         return data
 
-    def deserialize(self, data):
+    def deserialize(self, data, mapper=None):
+        """
+        Converts incoming data to internal types. Detects relation objects. Moves one to one relation attributes
+        to a separate key. Silently skips unknown attributes.
+
+        :param data: incoming data
+        :type data: dict
+
+        :param mapper: mapper, if None, mapper of the main object class will be used
+        :type mapper: sqlalchemy.orm.mapper.Mapper
+
+        :return: data with correct types
+        :rtype: dict
+        """
         attributes = {}
 
         if data is None:
             return attributes
 
-        mapper = inspect(self.objects_class)
+        def is_int(s):
+            try:
+                int(s)
+            except ValueError:
+                return False
+            return True
+
+        if mapper is None:
+            mapper = inspect(self.objects_class)
         for key, value in data.items():
             if key in mapper.relationships:
-                if isinstance(value, str):
+                rel_mapper = mapper.relationships[key].mapper
+                # handle a special case, when value is a dict with only all integer keys, then convert it to a list
+                if isinstance(value, dict) and all(is_int(pk) for pk in value.keys()):
+                    replacement = []
+                    for pk, attrs in value.items():
+                        attrs[rel_mapper.primary_key[0].name] = pk
+                        replacement.append(attrs)
+                    value = replacement
+                if isinstance(value, dict):
+                    attributes[key] = self.deserialize(value, rel_mapper)
+                elif isinstance(value, list):
                     attributes[key] = []
-                    for v in value.split(','):
-                        try:
-                            attributes[key].push(int(v))
-                        except ValueError:
-                            pass
+                    for item in value:
+                        if isinstance(item, dict):
+                            attributes[key].append(self.deserialize(item, rel_mapper))
+                        else:
+                            attributes[key].append(item)
                 else:
                     attributes[key] = value
             elif key in mapper.columns:
                 attributes[key] = self.deserialize_column(mapper.columns[key], value)
+            else:
+                for relation in mapper.relationships:
+                    if relation.direction == MANYTOONE or relation.uselist or key not in relation.mapper.columns:
+                        continue
+                    if relation.key not in attributes:
+                        attributes[relation.key] = []
+                    attributes[relation.key].append(self.deserialize_column(relation.mapper.columns[key], value))
 
         return attributes
 
@@ -287,22 +327,23 @@ class AlchemyMixin(object):
                 subexpressions = self._build_filter_expressions(value, self._logical_operators[arg], relationships)
                 expressions.append(subexpressions)
                 continue
-            for token in arg.split('__'):
+            tokens = arg.split('__')
+            for token in tokens:
                 if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
                     if op in [operators.between_op, operators.in_op]:
-                        if not isinstance(value, list):
-                            value = value.split(self.MULTIVALUE_SEPARATOR)
+                        value = value.split(self.MULTIVALUE_SEPARATOR)
+                    if isinstance(value, list):
                         value = list(map(lambda x: self.deserialize_column(column, x), value))
                     else:
                         value = self.deserialize_column(column, value)
-                    expressions.append(op(column_name, value))
-                    # reset column, obj_class and mapper back to main object
+                    if op == Function:
+                        expressions.append(Function(tokens[-1], column_name, value))
+                    else:
+                        expressions.append(op(column_name, value))
+                    # reset column_name, otherwise a default eq operator would be applied
                     column_name = None
-                    obj_class = self.objects_class
-                    mapper = inspect(obj_class)
-                    column_alias = None
-                    continue
+                    break
                 if token in mapper.relationships:
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
@@ -411,6 +452,164 @@ class AlchemyMixin(object):
         elif isinstance(relations, str):
             return [relations]
 
+    @staticmethod
+    def save_resource(obj, data, db_session):
+        """
+        Extracts relation dicts from data, saves them and then updates the main object.
+
+        :param obj: a new or existing model
+        :type obj: object
+
+        :param data: data to assign to the model and/or its relations
+        :type data: dict
+
+        :param db_session: SQLAlchemy session
+        :type db_session: sqlalchemy.orm.session.Session
+        """
+        # fetching related objects should not trigger saving of main object,
+        # because FKs could not have been set yet
+        autoflush = db_session.autoflush
+        db_session.autoflush = False
+        mapper = inspect(obj).mapper
+        for key, value in data.items():
+            if key not in mapper.relationships and getattr(obj, key) != value:
+                setattr(obj, key, value)
+        db_session.add(obj)
+        for key, value in data.items():
+            if key not in mapper.relationships:
+                continue
+            related_mapper = mapper.relationships[key].mapper
+            pk = related_mapper.primary_key[0].name
+            if isinstance(value, list):
+                keys = []
+                objects = getattr(obj, key)
+                reindexed = {getattr(related, pk): index for index, related in enumerate(objects)}
+                for item in value:
+                    if isinstance(item, dict):
+                        if pk in item and item[pk] in reindexed:
+                            AlchemyMixin.save_resource(objects[reindexed[item[pk]]], item, db_session)
+                            reindexed.pop(item[pk])
+                        else:
+                            objects.append(AlchemyMixin.update_or_create(db_session, related_mapper, item))
+                    else:
+                        if item in reindexed:
+                            reindexed.pop(item)
+                        else:
+                            keys.append(item)
+                for index in reindexed.values():
+                    del objects[index]
+                if keys:
+                    expression = related_mapper.primary_key[0].in_(keys)
+                    objects += db_session.query(related_mapper.class_).filter(expression).all()
+            else:
+                rel_obj = getattr(obj, key)
+                if isinstance(value, dict):
+                    if pk not in value or rel_obj is None:
+                        setattr(obj, key, AlchemyMixin.update_or_create(db_session, related_mapper, value))
+                    else:
+                        AlchemyMixin.save_resource(rel_obj, value, db_session)
+                elif rel_obj is None or getattr(rel_obj, pk) != value:
+                    expression = related_mapper.primary_key[0].__eq__(value)
+                    setattr(obj, key, db_session.query(related_mapper.class_).filter(expression).first())
+        db_session.autoflush = autoflush
+        return obj
+
+    @staticmethod
+    def update_or_create(db_session, mapper, attributes):
+        """
+        Updated the record if attributes contain the primary key value(s) and creates it if they don't.
+
+        :param db_session:
+        :type db_session: sqlalchemy.orm.session.Session
+
+        :param mapper:
+        :type mapper: sqlalchemy.orm.mapper.Mapper
+
+        :param attributes:
+        :type attributes: dict
+
+        :return:
+        :rtype: object
+        """
+        query_attrs = {}
+        for key in mapper.primary_key:
+            if key in attributes:
+                query_attrs[key] = attributes.pop(key)
+        if query_attrs:
+            obj = db_session.query(mapper.class_).get(query_attrs[0] if len(query_attrs) == 1 else tuple(query_attrs))
+        else:
+            obj = mapper.class_()
+        if attributes:
+            return AlchemyMixin.save_resource(obj, attributes, db_session)
+        return obj
+
+    @staticmethod
+    def get_or_create(db_session, model_class, query_attrs, update_attrs=None, update_existing=False):
+        """
+        Fetches the record and if it doesn't exist yet, creates it, handling a race condition.
+
+        :param db_session: session within DB connection
+        :type db_session: sqlalchemy.orm.session.Session
+
+        :param model_class: class of the model to return or create
+        :type model_class: class
+
+        :param query_attrs: attributes used to fetch the model
+        :type query_attrs: dict
+
+        :param update_attrs: attributes used to create a new model
+        :type update_attrs: dict
+
+        :param update_existing: if True and update_attrs are set, updates existing records
+        :type update_existing: bool
+
+        :return: existing or new object and a flag if existing or new object is being returned
+        :rtype: tuple
+        """
+        query = db_session.query(model_class).filter_by(**query_attrs)
+        existing = query.one_or_none()
+
+        if existing:
+            if update_existing and update_attrs is not None:
+                for key, value in update_attrs.items():
+                    if getattr(existing, key) != value:
+                        setattr(existing, key, value)
+            return existing, False
+
+        db_session.begin_nested()
+        try:
+            if update_attrs is None:
+                update_attrs = query_attrs
+            else:
+                update_attrs.update(query_attrs)
+            new_object = model_class(**update_attrs)
+            db_session.add(new_object)
+            db_session.commit()
+        except IntegrityError:
+            db_session.rollback()
+            existing = query.one_or_none()
+            if update_existing and update_attrs is not None:
+                for key, value in update_attrs.items():
+                    if getattr(existing, key) != value:
+                        setattr(existing, key, value)
+            return existing, False
+        return new_object, True
+
+    @staticmethod
+    def get_default_schema(model_class, method='POST'):
+        """
+        Returns a schema to be used in falconjsonio.schema.request_schema decorator
+        :return:
+        """
+        schema = {
+            'type': 'object',
+            'properties': {
+            },
+        }
+        if method == 'POST':
+            schema['required'] = []
+        return schema
+
 
 class CollectionResource(AlchemyMixin, BaseCollectionResource):
     """
@@ -433,6 +632,9 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         """
         super(CollectionResource, self).__init__(objects_class, max_limit)
         self.db_engine = db_engine
+        if not hasattr(self, '__request_schemas__'):
+            self.__request_schemas__ = {}
+        self.__request_schemas__['POST'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
 
     def get_queryset(self, req, resp, db_session=None):
         query = db_session.query(self.objects_class)
@@ -503,22 +705,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         try:
             with session_scope(self.db_engine) as db_session:
-                # replace any relations with objects instead of pks
-                mapper = inspect(self.objects_class)
-                for key, value in data.items():
-                    if key not in mapper.relationships:
-                        continue
-                    related_mapper = mapper.relationships[key].mapper
-                    if isinstance(value, list):
-                        expression = related_mapper.primary_key[0].in_(value)
-                        data[key] = db_session.query(related_mapper.class_).filter(expression).all()
-                    else:
-                        expression = related_mapper.primary_key[0].__eq__(value)
-                        data[key] = db_session.query(related_mapper.class_).filter(expression).first()
-
-                # create and save the object
-                resource = self.objects_class(**data)
-                db_session.add(resource)
+                resource = self.save_resource(self.objects_class(), data, db_session)
                 db_session.commit()
                 return self.serialize(resource, relations_include=relations)
         except (IntegrityError, ProgrammingError) as err:
@@ -547,6 +734,10 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         """
         super(SingleResource, self).__init__(objects_class)
         self.db_engine = db_engine
+        if not hasattr(self, '__request_schemas__'):
+            self.__request_schemas__ = {}
+        self.__request_schemas__['POST'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
+        self.__request_schemas__['PUT'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
 
     def get_object(self, req, resp, path_params, db_session=None):
         query = db_session.query(self.objects_class)
@@ -596,11 +787,9 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
 
     def update(self, req, resp, data, obj, db_session=None):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
-        for key, value in data.items():
-            setattr(obj, key, value)
-        db_session.add(obj)
+        resource = self.save_resource(obj, data, db_session)
         db_session.commit()
-        return self.serialize(obj, relations_include=relations)
+        return self.serialize(resource, relations_include=relations)
 
     def on_put(self, req, resp, *args, **kwargs):
         status_code = falcon.HTTP_OK
