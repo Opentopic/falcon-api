@@ -12,6 +12,7 @@ from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
 from sqlalchemy.sql.expression import and_, or_, not_
+from sqlalchemy.sql.functions import Function
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
@@ -59,7 +60,8 @@ class AlchemyMixin(object):
         'isnull': lambda c, x: x and c is not None or c is None,
         'year': lambda c, x: extract('year', c) == x,
         'month': lambda c, x: extract('month', c) == x,
-        'day': lambda c, x: extract('day', c) == x
+        'day': lambda c, x: extract('day', c) == x,
+        'func': Function,
     }
     _logical_operators = {
         'or': or_,
@@ -287,22 +289,23 @@ class AlchemyMixin(object):
                 subexpressions = self._build_filter_expressions(value, self._logical_operators[arg], relationships)
                 expressions.append(subexpressions)
                 continue
-            for token in arg.split('__'):
+            tokens = arg.split('__')
+            for token in tokens:
                 if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
-                    if op in [operators.between_op, operators.in_op]:
-                        if not isinstance(value, list):
+                    if op in [operators.between_op, operators.in_op, Function]:
+                        if isinstance(value, str):
                             value = value.split(self.MULTIVALUE_SEPARATOR)
                         value = list(map(lambda x: self.deserialize_column(column, x), value))
                     else:
                         value = self.deserialize_column(column, value)
-                    expressions.append(op(column_name, value))
-                    # reset column, obj_class and mapper back to main object
+                    if op == Function:
+                        expressions.append(Function(tokens[-1], column_name, value))
+                    else:
+                        expressions.append(op(column_name, value))
+                    # reset column_name, otherwise a default eq operator would be applied
                     column_name = None
-                    obj_class = self.objects_class
-                    mapper = inspect(obj_class)
-                    column_alias = None
-                    continue
+                    break
                 if token in mapper.relationships:
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
