@@ -273,21 +273,22 @@ class AlchemyMixin(object):
         }
         expressions = self._build_filter_expressions(conditions, default_op, relationships)
         longest_chains = []
-        for chain_a, chain_a_ext in relationships['join_chains']:
+        for chain_a, chain_a_ext, chain_a_is_outer in relationships['join_chains']:
             is_longest = True
-            for chain_b, chain_b_ext in relationships['join_chains']:
+            chain_b_is_outer = False
+            for chain_b, chain_b_ext, chain_b_is_outer in relationships['join_chains']:
                 if chain_a == chain_b:
                     continue
                 if set(chain_a).issubset(chain_b):
                     is_longest = False
                     continue
             if is_longest:
-                longest_chains.append(chain_a_ext)
+                longest_chains.append((chain_a_ext, chain_a_is_outer or chain_b_is_outer))
         if longest_chains:
             query = query.distinct()
-            for chain in longest_chains:
+            for chain, chain_is_outer in longest_chains:
                 for alias, relation in chain:
-                    query = query.join((alias, relation), from_joinpoint=True)
+                    query = query.join((alias, relation), from_joinpoint=True, isouter=chain_is_outer)
                 query = query.reset_joinpoint()
         if expressions is not None:
             query = query.filter(expressions)
@@ -301,6 +302,7 @@ class AlchemyMixin(object):
         column_alias = None
         join_chain = []
         join_chain_ext = []
+        join_is_outer = False
 
         if default_op is None:
             default_op = and_
@@ -341,6 +343,8 @@ class AlchemyMixin(object):
                         expressions.append(Function(tokens[-1], column_name, value))
                     else:
                         expressions.append(op(column_name, value))
+                    if token == 'isnull':
+                        join_is_outer = True
                     # reset column_name, otherwise a default eq operator would be applied
                     column_name = None
                     break
@@ -370,9 +374,10 @@ class AlchemyMixin(object):
             mapper = inspect(obj_class)
             column_alias = None
             if join_chain:
-                relationships['join_chains'].append((join_chain, join_chain_ext))
+                relationships['join_chains'].append((join_chain, join_chain_ext, join_is_outer))
                 join_chain = []
                 join_chain_ext = []
+                join_is_outer = False
         result = None
         if len(expressions) > 1:
             result = default_op(*expressions) if default_op != not_ else and_(*expressions)
