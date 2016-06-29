@@ -330,7 +330,7 @@ class AlchemyMixin(object):
                 expressions.append(subexpressions)
                 continue
             tokens = arg.split('__')
-            for token in tokens:
+            for index, token in enumerate(tokens):
                 if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
                     if op in [operators.between_op, operators.in_op]:
@@ -340,7 +340,11 @@ class AlchemyMixin(object):
                     else:
                         value = self.deserialize_column(column, value)
                     if op == Function:
-                        expressions.append(Function(tokens[-1], column_name, value))
+                        expression = column_name
+                        if len(tokens[index+1:]) > 1:
+                            for func_name in tokens[index+1:-1]:
+                                expression = Function(func_name, expression)
+                        expressions.append(Function(tokens[-1], expression, value))
                     else:
                         expressions.append(op(column_name, value))
                     if token == 'isnull':

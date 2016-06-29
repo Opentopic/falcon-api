@@ -119,6 +119,11 @@ LEFT OUTER JOIN (m2m_table AS m2m_table_1 %0A
 JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id) %0A
 ON some_table.id = m2m_table_1.model_id %20
 WHERE other_table_1.name IS NOT NULL"""),
+    ("""{"and": {"name__func__first_func__other_func": 20,
+                 "name__func__single_func": 20}}""",
+     """SELECT some_table.id, some_table.name %20
+FROM some_table %20
+WHERE other_func(first_func(some_table.name), ?) AND single_func(some_table.name, ?)"""),
 ])
 def query_filtered(request):
     return request.param
