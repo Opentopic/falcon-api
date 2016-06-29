@@ -112,6 +112,12 @@ WHERE some_table.name = ? AND some_table.id = ? OR some_table.name = ? AND some_
      """SELECT some_table.id, some_table.name %20
 FROM some_table %20
 WHERE (some_table.name = ? OR some_table.id = ?) AND (some_table.name = ? OR some_table.id = ?)"""),
+    ("""{"not": {"other_models__name__isnull": "true"}}""",
+     """SELECT DISTINCT some_table.id, some_table.name %20
+FROM some_table %0A
+LEFT OUTER JOIN (m2m_table AS m2m_table_1 %0A
+JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id) ON some_table.id = m2m_table_1.model_id %20
+WHERE other_table_1.name IS NOT NULL"""),
 ])
 def query_filtered(request):
     return request.param

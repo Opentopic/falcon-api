@@ -57,7 +57,7 @@ class AlchemyMixin(object):
         'endswith':     operators.endswith_op,
         'istartswith': lambda c, x: c.ilike(x.replace('%', '%%') + '%'),
         'iendswith': lambda c, x: c.ilike('%' + x.replace('%', '%%')),
-        'isnull': lambda c, x: x and c is not None or c is None,
+        'isnull': lambda c, x: c.is_(None) if x else c.isnot(None),
         'year': lambda c, x: extract('year', c) == x,
         'month': lambda c, x: extract('month', c) == x,
         'day': lambda c, x: extract('day', c) == x,
@@ -326,7 +326,7 @@ class AlchemyMixin(object):
                     continue
                 if not isinstance(value, dict):
                     raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                subexpressions = self._build_filter_expressions(value, self._logical_operators[arg], relationships)
+                subexpressions = self._build_filter_expressions(value, op, relationships)
                 expressions.append(subexpressions)
                 continue
             tokens = arg.split('__')
@@ -380,10 +380,10 @@ class AlchemyMixin(object):
                 join_is_outer = False
         result = None
         if len(expressions) > 1:
-            result = default_op(*expressions) if default_op != not_ else and_(*expressions)
+            result = default_op(*expressions) if default_op != not_ else not_(and_(*expressions))
         elif len(expressions) == 1:
-            result = expressions[0]
-        return result if default_op != not_ else not_(result)
+            result = expressions[0] if default_op != not_ else not_(expressions[0])
+        return result
 
     @staticmethod
     def next_alias(aliases, name, obj_class, use_existing=True):
