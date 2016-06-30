@@ -334,7 +334,8 @@ class AlchemyMixin(object):
                 if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
                     if op in [operators.between_op, operators.in_op]:
-                        value = value.split(self.MULTIVALUE_SEPARATOR)
+                        if not isinstance(value, list):
+                            value = value.split(self.MULTIVALUE_SEPARATOR)
                     if isinstance(value, list):
                         value = list(map(lambda x: self.deserialize_column(column, x), value))
                     else:
