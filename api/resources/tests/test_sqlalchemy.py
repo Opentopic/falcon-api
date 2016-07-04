@@ -135,7 +135,8 @@ def query_filtered(request):
 FROM some_table %0A
 ORDER BY some_table.name DESC, some_table.id"""),
     ({'-other_models__name__func__jsonb_object_field_text': 'value'},
-     """SELECT DISTINCT some_table.id, some_table.name, jsonb_object_field_text(other_table_1.name, ?) AS jsonb_object_field_text_1 %20
+     """SELECT DISTINCT some_table.id, some_table.name, %0A
+jsonb_object_field_text(other_table_1.name, ?) AS jsonb_object_field_text_1 %20
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
 JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id %0A
