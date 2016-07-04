@@ -138,8 +138,8 @@ ORDER BY some_table.name DESC, some_table.id"""),
      """SELECT some_table.id, some_table.name %20
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
-JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id %0A
-ORDER BY jsonb_object_field_text(other_table_1.name, ?) DESC"""),
+JOIN other_table AS other_models_1 ON other_models_1.id = m2m_table_1.other_model_id %0A
+ORDER BY jsonb_object_field_text(other_models_1.name, ?) DESC"""),
 ])
 def query_ordered(request):
     return request.param
