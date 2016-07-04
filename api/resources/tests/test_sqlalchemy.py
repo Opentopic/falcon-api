@@ -129,6 +129,22 @@ def query_filtered(request):
     return request.param
 
 
+@pytest.fixture(params=[
+    (['-name', 'id'],
+     """SELECT some_table.id, some_table.name %20
+FROM some_table %0A
+ORDER BY some_table.name DESC, some_table.id"""),
+    ({'-other_models__name__func__jsonb_object_field_text': 'value'},
+     """SELECT DISTINCT some_table.id, some_table.name, jsonb_object_field_text(other_table_1.name, ?) AS jsonb_object_field_text_1 %20
+FROM some_table %0A
+JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
+JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id %0A
+ORDER BY jsonb_object_field_text(other_table_1.name, ?) DESC"""),
+])
+def query_ordered(request):
+    return request.param
+
+
 @pytest.fixture()
 def model():
     model1 = Model()
@@ -163,15 +179,15 @@ def test_filter_by(engine, session, query_filtered):
     assert str(query_obj.statement.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
 
 
-def test_order_by(engine, session):
+def test_order_by(engine, session, query_ordered):
     """
     Test `get_object` func
     """
+    conditions, expected = query_ordered
+    if isinstance(conditions, str):
+        conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
     c = CollectionResource(objects_class=Model, db_engine=engine)
-    query_obj = c.order_by(session.query(Model), '-name', 'id')
-    expected = """SELECT some_table.id, some_table.name %20
-FROM some_table %0A
-ORDER BY some_table.name DESC, some_table.id"""
+    query_obj = c.order_by(session.query(Model), conditions)
     assert str(query_obj.statement.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
 
 

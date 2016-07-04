@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
-from sqlalchemy.sql.expression import and_, or_, not_
+from sqlalchemy.sql.expression import and_, or_, not_, desc
 from sqlalchemy.sql.functions import Function
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
@@ -345,9 +345,10 @@ class AlchemyMixin(object):
                         if len(tokens[index+1:]) > 1:
                             for func_name in tokens[index+1:-1]:
                                 expression = Function(func_name, expression)
-                        expressions.append(Function(tokens[-1], expression, value))
+                        expression = Function(tokens[-1], expression, value)
                     else:
-                        expressions.append(op(column_name, value))
+                        expression = op(column_name, value)
+                    expressions.append(expression)
                     if token == 'isnull':
                         join_is_outer = True
                     # reset column_name, otherwise a default eq operator would be applied
@@ -404,7 +405,7 @@ class AlchemyMixin(object):
                              'aliased': [aliased(obj_class, name=name + '_1')]}
         return aliases[name]['aliased'][-1], is_new
 
-    def order_by(self, query, *args):
+    def order_by(self, query, criteria):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
@@ -417,12 +418,43 @@ class AlchemyMixin(object):
         obj_class = self.objects_class
         mapper = inspect(obj_class)
 
-        for arg in args:
+        expressions = []
+
+        if isinstance(criteria, dict):
+            criteria = list(criteria.items())
+        for arg in criteria:
+            if isinstance(arg, tuple):
+                arg, value = arg
+            else:
+                value = None
             is_ascending = True
             if len(arg) and arg[0] == '+' or arg[0] == '-':
                 is_ascending = arg[:1] == '+'
                 arg = arg[1:]
-            for token in arg.split('__'):
+            tokens = arg.split('__')
+            for index, token in enumerate(tokens):
+                if column_name is not None and token in self._underscore_operators:
+                    op = self._underscore_operators[token]
+                    if op in [operators.between_op, operators.in_op]:
+                        if not isinstance(value, list):
+                            value = value.split(self.MULTIVALUE_SEPARATOR)
+                    if value:
+                        if isinstance(value, list):
+                            value = list(map(lambda x: self.deserialize_column(column, x), value))
+                        else:
+                            value = self.deserialize_column(column, value)
+                    if op == Function:
+                        expression = column_name
+                        if len(tokens[index+1:]) > 1:
+                            for func_name in tokens[index+1:-1]:
+                                expression = Function(func_name, expression)
+                        expression = Function(tokens[-1], expression, value)
+                    else:
+                        expression = op(column_name, value)
+                    expressions.append(expression if is_ascending else desc(expression))
+                    # reset column_name, otherwise a default eq operator would be applied
+                    column_name = None
+                    break
                 if token in mapper.relationships:
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
@@ -437,7 +469,10 @@ class AlchemyMixin(object):
                 column = mapper.columns[token]
             if column_name is not None:
                 # if last token was a relation it's just going to be ignored
-                query = query.order_by(column if is_ascending else column.desc())
+                expressions.append(column if is_ascending else column.desc())
+            if expressions:
+                query = query.order_by(*expressions)
+                expressions = []
             query = query.reset_joinpoint()
             # reset everything back to main object
             column_name = None
@@ -653,9 +688,15 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             query = query.options(subqueryload('*') if relations is None else subqueryload(*relations))
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if order:
-            if not isinstance(order, list):
+            if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
+                try:
+                    order = json.loads(order)
+                except ValueError:
+                    # not valid json, ignore and try to parse as an ordinary list of attributes
+                    pass
+            if not isinstance(order, list) and not isinstance(order, dict):
                 order = [order]
-            query = self.order_by(query, *order)
+            query = self.order_by(query, order)
         else:
             primary_keys = inspect(self.objects_class).primary_key
             query = query.order_by(*primary_keys)
