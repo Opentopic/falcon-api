@@ -418,7 +418,6 @@ class AlchemyMixin(object):
         obj_class = self.objects_class
         mapper = inspect(obj_class)
 
-        has_join = False
         expressions = []
 
         if isinstance(criteria, dict):
@@ -461,7 +460,6 @@ class AlchemyMixin(object):
                     obj_class = mapper.relationships[token].mapper.class_
                     mapper = mapper.relationships[token].mapper
                     query = query.join(token, aliased=True, from_joinpoint=True)
-                    has_join = True
                     continue
                 if token not in mapper.column_attrs:
                     # if token is not an op or relation it has to be a valid column
@@ -480,8 +478,6 @@ class AlchemyMixin(object):
             column_name = None
             obj_class = self.objects_class
             mapper = inspect(obj_class)
-        if has_join:
-            query = query.from_self().distinct()
         return query
 
     def clean_relations(self, relations):
