@@ -112,8 +112,36 @@ WHERE some_table.name = ? AND some_table.id = ? OR some_table.name = ? AND some_
      """SELECT some_table.id, some_table.name %20
 FROM some_table %20
 WHERE (some_table.name = ? OR some_table.id = ?) AND (some_table.name = ? OR some_table.id = ?)"""),
+    ("""{"not": {"other_models__name__isnull": "true"}}""",
+     """SELECT DISTINCT some_table.id, some_table.name %20
+FROM some_table %0A
+LEFT OUTER JOIN (m2m_table AS m2m_table_1 %0A
+JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id) %0A
+ON some_table.id = m2m_table_1.model_id %20
+WHERE other_table_1.name IS NOT NULL"""),
+    ("""{"and": {"name__func__first_func__other_func": 20,
+                 "name__func__single_func": 20}}""",
+     """SELECT some_table.id, some_table.name %20
+FROM some_table %20
+WHERE other_func(first_func(some_table.name), ?) AND single_func(some_table.name, ?)"""),
 ])
 def query_filtered(request):
+    return request.param
+
+
+@pytest.fixture(params=[
+    (['-name', 'id'],
+     """SELECT some_table.id, some_table.name %20
+FROM some_table %0A
+ORDER BY some_table.name DESC, some_table.id"""),
+    ({'-other_models__name__func__jsonb_object_field_text': 'value'},
+     """SELECT DISTINCT some_table.id, some_table.name, jsonb_object_field_text(other_table_1.name, ?) AS jsonb_object_field_text_1 %20
+FROM some_table %0A
+JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
+JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id %0A
+ORDER BY jsonb_object_field_text(other_table_1.name, ?) DESC"""),
+])
+def query_ordered(request):
     return request.param
 
 
@@ -151,15 +179,15 @@ def test_filter_by(engine, session, query_filtered):
     assert str(query_obj.statement.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
 
 
-def test_order_by(engine, session):
+def test_order_by(engine, session, query_ordered):
     """
     Test `get_object` func
     """
+    conditions, expected = query_ordered
+    if isinstance(conditions, str):
+        conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
     c = CollectionResource(objects_class=Model, db_engine=engine)
-    query_obj = c.order_by(session.query(Model), '-name', 'id')
-    expected = """SELECT some_table.id, some_table.name %20
-FROM some_table %0A
-ORDER BY some_table.name DESC, some_table.id"""
+    query_obj = c.order_by(session.query(Model), conditions)
     assert str(query_obj.statement.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
 
 

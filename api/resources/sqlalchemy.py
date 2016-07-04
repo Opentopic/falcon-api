@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract
-from sqlalchemy.sql.expression import and_, or_, not_
+from sqlalchemy.sql.expression import and_, or_, not_, desc
 from sqlalchemy.sql.functions import Function
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
@@ -57,7 +57,7 @@ class AlchemyMixin(object):
         'endswith':     operators.endswith_op,
         'istartswith': lambda c, x: c.ilike(x.replace('%', '%%') + '%'),
         'iendswith': lambda c, x: c.ilike('%' + x.replace('%', '%%')),
-        'isnull': lambda c, x: x and c is not None or c is None,
+        'isnull': lambda c, x: c.is_(None) if x else c.isnot(None),
         'year': lambda c, x: extract('year', c) == x,
         'month': lambda c, x: extract('month', c) == x,
         'day': lambda c, x: extract('day', c) == x,
@@ -273,21 +273,22 @@ class AlchemyMixin(object):
         }
         expressions = self._build_filter_expressions(conditions, default_op, relationships)
         longest_chains = []
-        for chain_a, chain_a_ext in relationships['join_chains']:
+        for chain_a, chain_a_ext, chain_a_is_outer in relationships['join_chains']:
             is_longest = True
-            for chain_b, chain_b_ext in relationships['join_chains']:
+            chain_b_is_outer = False
+            for chain_b, chain_b_ext, chain_b_is_outer in relationships['join_chains']:
                 if chain_a == chain_b:
                     continue
                 if set(chain_a).issubset(chain_b):
                     is_longest = False
                     continue
             if is_longest:
-                longest_chains.append(chain_a_ext)
+                longest_chains.append((chain_a_ext, chain_a_is_outer or chain_b_is_outer))
         if longest_chains:
             query = query.distinct()
-            for chain in longest_chains:
+            for chain, chain_is_outer in longest_chains:
                 for alias, relation in chain:
-                    query = query.join((alias, relation), from_joinpoint=True)
+                    query = query.join((alias, relation), from_joinpoint=True, isouter=chain_is_outer)
                 query = query.reset_joinpoint()
         if expressions is not None:
             query = query.filter(expressions)
@@ -301,6 +302,7 @@ class AlchemyMixin(object):
         column_alias = None
         join_chain = []
         join_chain_ext = []
+        join_is_outer = False
 
         if default_op is None:
             default_op = and_
@@ -324,23 +326,31 @@ class AlchemyMixin(object):
                     continue
                 if not isinstance(value, dict):
                     raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                subexpressions = self._build_filter_expressions(value, self._logical_operators[arg], relationships)
+                subexpressions = self._build_filter_expressions(value, op, relationships)
                 expressions.append(subexpressions)
                 continue
             tokens = arg.split('__')
-            for token in tokens:
+            for index, token in enumerate(tokens):
                 if column_name is not None and token in self._underscore_operators:
                     op = self._underscore_operators[token]
                     if op in [operators.between_op, operators.in_op]:
-                        value = value.split(self.MULTIVALUE_SEPARATOR)
+                        if not isinstance(value, list):
+                            value = value.split(self.MULTIVALUE_SEPARATOR)
                     if isinstance(value, list):
                         value = list(map(lambda x: self.deserialize_column(column, x), value))
                     else:
                         value = self.deserialize_column(column, value)
                     if op == Function:
-                        expressions.append(Function(tokens[-1], column_name, value))
+                        expression = column_name
+                        if len(tokens[index+1:]) > 1:
+                            for func_name in tokens[index+1:-1]:
+                                expression = Function(func_name, expression)
+                        expression = Function(tokens[-1], expression, value)
                     else:
-                        expressions.append(op(column_name, value))
+                        expression = op(column_name, value)
+                    expressions.append(expression)
+                    if token == 'isnull':
+                        join_is_outer = True
                     # reset column_name, otherwise a default eq operator would be applied
                     column_name = None
                     break
@@ -370,15 +380,16 @@ class AlchemyMixin(object):
             mapper = inspect(obj_class)
             column_alias = None
             if join_chain:
-                relationships['join_chains'].append((join_chain, join_chain_ext))
+                relationships['join_chains'].append((join_chain, join_chain_ext, join_is_outer))
                 join_chain = []
                 join_chain_ext = []
+                join_is_outer = False
         result = None
         if len(expressions) > 1:
-            result = default_op(*expressions) if default_op != not_ else and_(*expressions)
+            result = default_op(*expressions) if default_op != not_ else not_(and_(*expressions))
         elif len(expressions) == 1:
-            result = expressions[0]
-        return result if default_op != not_ else not_(result)
+            result = expressions[0] if default_op != not_ else not_(expressions[0])
+        return result
 
     @staticmethod
     def next_alias(aliases, name, obj_class, use_existing=True):
@@ -394,7 +405,7 @@ class AlchemyMixin(object):
                              'aliased': [aliased(obj_class, name=name + '_1')]}
         return aliases[name]['aliased'][-1], is_new
 
-    def order_by(self, query, *args):
+    def order_by(self, query, criteria):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
@@ -407,12 +418,43 @@ class AlchemyMixin(object):
         obj_class = self.objects_class
         mapper = inspect(obj_class)
 
-        for arg in args:
+        expressions = []
+
+        if isinstance(criteria, dict):
+            criteria = list(criteria.items())
+        for arg in criteria:
+            if isinstance(arg, tuple):
+                arg, value = arg
+            else:
+                value = None
             is_ascending = True
             if len(arg) and arg[0] == '+' or arg[0] == '-':
                 is_ascending = arg[:1] == '+'
                 arg = arg[1:]
-            for token in arg.split('__'):
+            tokens = arg.split('__')
+            for index, token in enumerate(tokens):
+                if column_name is not None and token in self._underscore_operators:
+                    op = self._underscore_operators[token]
+                    if op in [operators.between_op, operators.in_op]:
+                        if not isinstance(value, list):
+                            value = value.split(self.MULTIVALUE_SEPARATOR)
+                    if value:
+                        if isinstance(value, list):
+                            value = list(map(lambda x: self.deserialize_column(column, x), value))
+                        else:
+                            value = self.deserialize_column(column, value)
+                    if op == Function:
+                        expression = column_name
+                        if len(tokens[index+1:]) > 1:
+                            for func_name in tokens[index+1:-1]:
+                                expression = Function(func_name, expression)
+                        expression = Function(tokens[-1], expression, value)
+                    else:
+                        expression = op(column_name, value)
+                    expressions.append(expression if is_ascending else desc(expression))
+                    # reset column_name, otherwise a default eq operator would be applied
+                    column_name = None
+                    break
                 if token in mapper.relationships:
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
@@ -427,7 +469,10 @@ class AlchemyMixin(object):
                 column = mapper.columns[token]
             if column_name is not None:
                 # if last token was a relation it's just going to be ignored
-                query = query.order_by(column if is_ascending else column.desc())
+                expressions.append(column if is_ascending else column.desc())
+            if expressions:
+                query = query.order_by(*expressions)
+                expressions = []
             query = query.reset_joinpoint()
             # reset everything back to main object
             column_name = None
@@ -643,9 +688,15 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             query = query.options(subqueryload('*') if relations is None else subqueryload(*relations))
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if order:
-            if not isinstance(order, list):
+            if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
+                try:
+                    order = json.loads(order)
+                except ValueError:
+                    # not valid json, ignore and try to parse as an ordinary list of attributes
+                    pass
+            if not isinstance(order, list) and not isinstance(order, dict):
                 order = [order]
-            query = self.order_by(query, *order)
+            query = self.order_by(query, order)
         else:
             primary_keys = inspect(self.objects_class).primary_key
             query = query.order_by(*primary_keys)
