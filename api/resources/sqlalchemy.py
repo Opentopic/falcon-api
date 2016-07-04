@@ -358,8 +358,7 @@ class AlchemyMixin(object):
                     # follow the relation and change current obj_class and mapper
                     obj_class = mapper.relationships[token].mapper.class_
                     mapper = mapper.relationships[token].mapper
-                    column_alias, is_new_alias = self.next_alias(relationships['aliases'], mapper.local_table.name,
-                                                                 obj_class)
+                    column_alias, is_new_alias = self.next_alias(relationships['aliases'], token, obj_class)
                     join_chain.append(token)
                     join_chain_ext.append((column_alias, token))
                     continue
