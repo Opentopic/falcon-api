@@ -389,7 +389,8 @@ class AlchemyMixin(object):
                 continue
             if token not in mapper.column_attrs:
                 # if token is not an op or relation it has to be a valid column
-                raise HTTPBadRequest('Invalid attribute', 'Order attribute {} is invalid'.format(arg))
+                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected'
+                                                          'to be a known column name'.format('__'.join(tokens), token))
             column_name = getattr(obj_class if column_alias is None else column_alias, token)
             """:type column: sqlalchemy.schema.Column"""
             column = mapper.columns[token]
@@ -456,7 +457,8 @@ class AlchemyMixin(object):
             if len(arg) and arg[0] == '+' or arg[0] == '-':
                 is_ascending = arg[:1] == '+'
                 arg = arg[1:]
-            expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships, lambda c, n, v: c)
+            expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
+                                            lambda c, n, v: c)
             if expression is not None:
                 expressions.append(expression if is_ascending else desc(expression))
         return expressions
