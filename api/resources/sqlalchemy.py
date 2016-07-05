@@ -5,7 +5,7 @@ from decimal import Decimal
 import falcon
 import json
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
-from sqlalchemy import inspect, func
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
