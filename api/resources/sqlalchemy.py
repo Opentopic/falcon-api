@@ -704,7 +704,9 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         result = queryset.session.execute(stmt).first()
         if result is None:
             return {}
-        return {'total_' + key: value for key, value in result.items()}
+
+        return {'total_' + key: value if not isinstance(value, Decimal) else float(value)
+                for key, value in result.items()}
 
     def _build_total_expressions(self, queryset, totals):
         mapper = inspect(self.objects_class)
