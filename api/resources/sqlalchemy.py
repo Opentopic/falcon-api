@@ -466,7 +466,7 @@ class AlchemyMixin(object):
                 is_ascending = arg[:1] == '+'
                 arg = arg[1:]
             expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
-                                            lambda c, n, v: c)
+                                            lambda c, n, v: n)
             if expression is not None:
                 expressions.append(expression if is_ascending else desc(expression))
         return expressions
@@ -698,21 +698,35 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         return self.filter_by(query, req.params).order_by(*primary_keys)
 
     def get_total_objects(self, queryset, totals):
+        stmt = self._build_total_expressions(queryset, totals)
+        result = queryset.session.execute(stmt).first()
+        if result is None:
+            return {}
+        return {'total_' + key: value for key, value in result.items()}
+
+    def _build_total_expressions(self, queryset, totals):
         mapper = inspect(self.objects_class)
         primary_keys = mapper.primary_key
+        relationships = {
+            'aliases': {},
+            'join_chains': [],
+        }
         aggregates = []
         for total in totals:
             for aggregate, columns in total.items():
                 if columns:
                     if not isinstance(columns, list):
                         columns = [columns]
-                    columns = list(map(lambda x: mapper.columns[x], columns))
-                aggregates.append(Function(aggregate, *(columns if columns else primary_keys)))
-        agg_query = queryset.statement.with_only_columns(aggregates).order_by(None)
-        result = queryset.session.execute(agg_query).first()
-        if result is None:
-            return {}
-        return {'total_' + key: value for key, value in result.items()}
+                    for column in columns:
+                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, relationships,
+                                                        lambda c, n, v: n)
+                        if expression is not None:
+                            aggregates.append(Function(aggregate, expression).label(aggregate))
+                else:
+                    aggregates.append(Function(aggregate, *primary_keys).label(aggregate))
+        agg_query = self._apply_joins(queryset, relationships, distinct=False)
+        agg_query = agg_query.statement.with_only_columns(aggregates).order_by(None)
+        return agg_query
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
