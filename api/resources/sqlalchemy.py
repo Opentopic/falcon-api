@@ -227,7 +227,7 @@ class AlchemyMixin(object):
             return float(value)
         return value
 
-    def filter_by(self, query, conditions):
+    def filter_by(self, query, conditions, order_criteria=None):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
@@ -235,10 +235,13 @@ class AlchemyMixin(object):
         :param conditions: conditions dictionary
         :type conditions: dict
 
+        :param order_criteria: optional order criteria
+        :type order_criteria: dict
+
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
-        return self._filter_or_exclude(query, conditions)
+        return self._filter_or_exclude(query, conditions, order_criteria=order_criteria)
 
     def exclude_by(self, query, conditions):
         """
@@ -253,7 +256,7 @@ class AlchemyMixin(object):
         """
         return self._filter_or_exclude(query, {'not': {'and': conditions}})
 
-    def _filter_or_exclude(self, query, conditions, default_op=None):
+    def _filter_or_exclude(self, query, conditions, default_op=None, order_criteria=None):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
@@ -272,9 +275,14 @@ class AlchemyMixin(object):
             'join_chains': [],
         }
         expressions = self._build_filter_expressions(conditions, default_op, relationships)
-        query = self._apply_joins(query, relationships)
+        order_expressions = []
+        if order_criteria:
+            order_expressions = self._build_order_expressions(order_criteria, relationships)
+        query = self._apply_joins(query, relationships, distinct=expressions is not None)
         if expressions is not None:
             query = query.filter(expressions)
+        if order_criteria and order_expressions is not None:
+            query = query.order_by(*order_expressions)
         return query
 
     def _apply_joins(self, query, relationships, distinct=True):
@@ -675,7 +683,6 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
-        query = self.filter_by(query, req.params)
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if order:
             if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
@@ -686,11 +693,9 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                     pass
             if not isinstance(order, list) and not isinstance(order, dict):
                 order = [order]
-            query = self.order_by(query, order)
-        else:
-            primary_keys = inspect(self.objects_class).primary_key
-            query = query.order_by(*primary_keys)
-        return query
+            return self.filter_by(query, req.params, order)
+        primary_keys = inspect(self.objects_class).primary_key
+        return self.filter_by(query, req.params).order_by(*primary_keys)
 
     def get_total_objects(self, queryset):
         primary_keys = inspect(self.objects_class).primary_key
