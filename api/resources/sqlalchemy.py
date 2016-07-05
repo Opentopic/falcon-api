@@ -698,6 +698,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         return self.filter_by(query, req.params).order_by(*primary_keys)
 
     def get_total_objects(self, queryset, totals):
+        if not totals:
+            return {}
         stmt = self._build_total_expressions(queryset, totals)
         result = queryset.session.execute(stmt).first()
         if result is None:
