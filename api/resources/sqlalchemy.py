@@ -701,8 +701,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         primary_keys = inspect(self.objects_class).primary_key
         aggregates = []
         for total in totals:
-            for f, columns in total.items:
-                aggregates.append(Function(f, *(columns if columns else primary_keys)))
+            for aggregate, columns in total.items():
+                aggregates.append(Function(aggregate, *(columns if columns else primary_keys)))
         agg_query = queryset.statement.with_only_columns(aggregates).order_by(None)
         result = queryset.session.execute(agg_query).first()
         if result is None:
