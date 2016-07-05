@@ -145,14 +145,14 @@ class BaseCollectionResource(BaseResource):
         """
         totals = self.get_param_or_post(req, self.PARAM_TOTALS, [])
         if totals:
+            if isinstance(totals, str):
+                totals = json.loads(totals)
             if isinstance(totals, dict):
                 totals = [totals]
-            elif isinstance(totals, str):
-                totals = json.loads(totals)
             else:
                 totals = list(map(lambda x: x if isinstance(x, dict) else {x: None}, totals))
         total_count = self.get_param_or_post(req, self.PARAM_TOTAL_COUNT)
-        if total_count and not filter(lambda x: 'count' in x, totals):
+        if total_count and not list(filter(lambda x: 'count' in x, totals)):
             totals.append({'count': None})
         return totals
 

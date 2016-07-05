@@ -698,10 +698,15 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         return self.filter_by(query, req.params).order_by(*primary_keys)
 
     def get_total_objects(self, queryset, totals):
-        primary_keys = inspect(self.objects_class).primary_key
+        mapper = inspect(self.objects_class)
+        primary_keys = mapper.primary_key
         aggregates = []
         for total in totals:
             for aggregate, columns in total.items():
+                if columns:
+                    if not isinstance(columns, list):
+                        columns = [columns]
+                    columns = list(map(lambda x: mapper.columns[x], columns))
                 aggregates.append(Function(aggregate, *(columns if columns else primary_keys)))
         agg_query = queryset.statement.with_only_columns(aggregates).order_by(None)
         result = queryset.session.execute(agg_query).first()
