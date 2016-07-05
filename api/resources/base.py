@@ -1,3 +1,5 @@
+import json
+
 import falcon
 
 from api.exceptions import ParamException
@@ -119,6 +121,7 @@ class BaseCollectionResource(BaseResource):
     PARAM_OFFSET = 'offset'
     PARAM_ORDER = 'order'
     PARAM_TOTAL_COUNT = 'total_count'
+    PARAM_TOTALS = 'totals'
     PARAM_SEARCH = 'search'
 
     def __init__(self, objects_class, max_limit=None):
@@ -129,6 +132,29 @@ class BaseCollectionResource(BaseResource):
         """
         super().__init__(objects_class)
         self.max_limit = max_limit
+
+    def get_param_totals(self, req):
+        """
+        Gets the totals and total_count params and normalizes them into a single list.
+
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :return: total expressions
+        :rtype: list
+        """
+        totals = self.get_param_or_post(req, self.PARAM_TOTALS, [])
+        if totals:
+            if isinstance(totals, dict):
+                totals = [totals]
+            elif isinstance(totals, str):
+                totals = json.loads(totals)
+            else:
+                totals = list(map(lambda x: x if isinstance(x, dict) else {x: None}, totals))
+        total_count = self.get_param_or_post(req, self.PARAM_TOTAL_COUNT)
+        if total_count and not filter(lambda x: 'count' in x, totals):
+            totals.append({'count': None})
+        return totals
 
     def get_queryset(self, req, resp):
         """
@@ -144,16 +170,24 @@ class BaseCollectionResource(BaseResource):
         """
         raise NotImplementedError
 
-    def get_total_objects(self, queryset):
+    def get_total_objects(self, queryset, totals):
         """
         Return total number of results in a query.
 
         :param queryset: queryset object from :func:`get_queryset`
 
-        :return: total number of results returned by this query
-        :rtype: int
+        :param totals: a list of dicts with aggregate function as key and column as value
+        :type totals: list
+
+        :return: dict with totals calculated in this query, ex. total_count with number of results
+        :rtype: dict
         """
-        return queryset.count()
+        if not totals:
+            return {}
+        for total in totals:
+            if len(total) > 1 or 'count' not in total or total['count'] is not None:
+                raise falcon.HTTPBadRequest('Invalid attribute', 'Only _count_ is supported in the _totals_ param')
+        return {'total_count': queryset.count()}
 
     def get_object_list(self, queryset, limit=None, offset=None):
         """
@@ -191,18 +225,19 @@ class BaseCollectionResource(BaseResource):
         """
         limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
-        get_total = self.get_param_or_post(req, self.PARAM_TOTAL_COUNT)
+        totals = self.get_param_totals(req)
 
         queryset = self.get_queryset(req, resp)
-        total = self.get_total_objects(queryset) if get_total else None
+        totals = self.get_total_objects(queryset, totals)
 
         object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
 
         result = {
             'results': [self.serialize(obj) for obj in object_list],
-            'total': total,
+            'total': totals.pop('total_count') if 'total_count' in totals else None,
             'returned': len(object_list)
         }
+        result.update(totals)
         self.render_response(result, req, resp)
 
     def create(self, req, resp, data):

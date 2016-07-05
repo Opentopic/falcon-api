@@ -697,10 +697,17 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         primary_keys = inspect(self.objects_class).primary_key
         return self.filter_by(query, req.params).order_by(*primary_keys)
 
-    def get_total_objects(self, queryset):
+    def get_total_objects(self, queryset, totals):
         primary_keys = inspect(self.objects_class).primary_key
-        count_q = queryset.statement.with_only_columns([func.count(*primary_keys)]).order_by(None)
-        return queryset.session.execute(count_q).scalar()
+        aggregates = []
+        for total in totals:
+            for f, columns in total.items:
+                aggregates.append(Function(f, *(columns if columns else primary_keys)))
+        agg_query = queryset.statement.with_only_columns(aggregates).order_by(None)
+        result = queryset.session.execute(agg_query).first()
+        if result is None:
+            return {}
+        return {'total_' + key: value for key, value in result.items()}
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
@@ -722,22 +729,23 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             limit = int(limit)
         if offset is not None:
             offset = int(offset)
-        get_total = self.get_param_or_post(req, self.PARAM_TOTAL_COUNT)
+        totals = self.get_param_totals(req)
         # retrieve that param without removing it so self.get_queryset() so it can also use it
         relations = self.clean_relations(req.params.get(self.PARAM_RELATIONS, ''))
 
         with session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
-            total = self.get_total_objects(query) if get_total else None
+            totals = self.get_total_objects(query, totals)
 
             object_list = self.get_object_list(query, limit, offset)
 
             serialized = [self.serialize(obj, relations_include=relations) for obj in object_list]
             result = {
                 'results': serialized,
-                'total': total,
+                'total': totals['total_count'] if 'total_count' in totals else None,
                 'returned': len(serialized),  # avoid calling object_list.count() which executes the query again
             }
+            result.update(totals)
 
         self.render_response(result, req, resp)
 
