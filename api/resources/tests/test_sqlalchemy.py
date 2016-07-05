@@ -80,9 +80,9 @@ WHERE some_table.name = ? AND some_table.id >= ?"""),
      """SELECT DISTINCT some_table.id, some_table.name %20
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
-JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id %0A
-JOIN third_table AS third_table_1 ON other_table_1.id = third_table_1.other_model_id %20
-WHERE other_table_1.name = ? AND third_table_1.name = ?"""),
+JOIN other_table AS other_models_1 ON other_models_1.id = m2m_table_1.other_model_id %0A
+JOIN third_table AS third_models_1 ON other_models_1.id = third_models_1.other_model_id %20
+WHERE other_models_1.name = ? AND third_models_1.name = ?"""),
     ("""{"or": {"name": "value",
                  "id": 20}}""",
      """SELECT some_table.id, some_table.name %20
@@ -93,9 +93,9 @@ WHERE some_table.name = ? OR some_table.id = ?"""),
      """SELECT DISTINCT some_table.id, some_table.name %20
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
-JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id %0A
-JOIN third_table AS third_table_1 ON other_table_1.id = third_table_1.other_model_id %20
-WHERE other_table_1.name = ? OR third_table_1.name = ?"""),
+JOIN other_table AS other_models_1 ON other_models_1.id = m2m_table_1.other_model_id %0A
+JOIN third_table AS third_models_1 ON other_models_1.id = third_models_1.other_model_id %20
+WHERE other_models_1.name = ? OR third_models_1.name = ?"""),
     ("""{"or": [{"name": "value",
                   "id": 20},
                 {"name": "value2",
@@ -116,9 +116,9 @@ WHERE (some_table.name = ? OR some_table.id = ?) AND (some_table.name = ? OR som
      """SELECT DISTINCT some_table.id, some_table.name %20
 FROM some_table %0A
 LEFT OUTER JOIN (m2m_table AS m2m_table_1 %0A
-JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id) %0A
+JOIN other_table AS other_models_1 ON other_models_1.id = m2m_table_1.other_model_id) %0A
 ON some_table.id = m2m_table_1.model_id %20
-WHERE other_table_1.name IS NOT NULL"""),
+WHERE other_models_1.name IS NOT NULL"""),
     ("""{"and": {"name__func__first_func__other_func": 20,
                  "name__func__single_func": 20}}""",
      """SELECT some_table.id, some_table.name %20
@@ -135,13 +135,24 @@ def query_filtered(request):
 FROM some_table %0A
 ORDER BY some_table.name DESC, some_table.id"""),
     ({'-other_models__name__func__jsonb_object_field_text': 'value'},
-     """SELECT DISTINCT some_table.id, some_table.name, jsonb_object_field_text(other_table_1.name, ?) AS jsonb_object_field_text_1 %20
+     """SELECT some_table.id, some_table.name %20
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
-JOIN other_table AS other_table_1 ON other_table_1.id = m2m_table_1.other_model_id %0A
-ORDER BY jsonb_object_field_text(other_table_1.name, ?) DESC"""),
+JOIN other_table AS other_models_1 ON other_models_1.id = m2m_table_1.other_model_id %0A
+ORDER BY jsonb_object_field_text(other_models_1.name, ?) DESC"""),
 ])
 def query_ordered(request):
+    return request.param
+
+
+@pytest.fixture(params=[
+    ("""[{"sum": ["other_models__id"]}]""",
+     """SELECT sum(other_models_1.id) AS sum %20
+FROM some_table %0A
+JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
+JOIN other_table AS other_models_1 ON other_models_1.id = m2m_table_1.other_model_id"""),
+])
+def query_totals(request):
     return request.param
 
 
@@ -189,6 +200,18 @@ def test_order_by(engine, session, query_ordered):
     c = CollectionResource(objects_class=Model, db_engine=engine)
     query_obj = c.order_by(session.query(Model), conditions)
     assert str(query_obj.statement.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
+
+
+def test_totals(engine, session, query_totals):
+    """
+    Test `get_object` func
+    """
+    conditions, expected = query_totals
+    if isinstance(conditions, str):
+        conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
+    c = CollectionResource(objects_class=Model, db_engine=engine)
+    stmt = c._build_total_expressions(session.query(Model), conditions)
+    assert str(stmt.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
 
 
 def test_serialize(model):

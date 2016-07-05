@@ -5,7 +5,7 @@ from decimal import Decimal
 import falcon
 import json
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
-from sqlalchemy import inspect, func
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
@@ -227,7 +227,7 @@ class AlchemyMixin(object):
             return float(value)
         return value
 
-    def filter_by(self, query, conditions):
+    def filter_by(self, query, conditions, order_criteria=None):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
@@ -235,10 +235,13 @@ class AlchemyMixin(object):
         :param conditions: conditions dictionary
         :type conditions: dict
 
+        :param order_criteria: optional order criteria
+        :type order_criteria: dict
+
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
-        return self._filter_or_exclude(query, conditions)
+        return self._filter_or_exclude(query, conditions, order_criteria=order_criteria)
 
     def exclude_by(self, query, conditions):
         """
@@ -253,7 +256,7 @@ class AlchemyMixin(object):
         """
         return self._filter_or_exclude(query, {'not': {'and': conditions}})
 
-    def _filter_or_exclude(self, query, conditions, default_op=None):
+    def _filter_or_exclude(self, query, conditions, default_op=None, order_criteria=None):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
@@ -272,6 +275,17 @@ class AlchemyMixin(object):
             'join_chains': [],
         }
         expressions = self._build_filter_expressions(conditions, default_op, relationships)
+        order_expressions = []
+        if order_criteria:
+            order_expressions = self._build_order_expressions(order_criteria, relationships)
+        query = self._apply_joins(query, relationships, distinct=expressions is not None)
+        if expressions is not None:
+            query = query.filter(expressions)
+        if order_criteria and order_expressions is not None:
+            query = query.order_by(*order_expressions)
+        return query
+
+    def _apply_joins(self, query, relationships, distinct=True):
         longest_chains = []
         for chain_a, chain_a_ext, chain_a_is_outer in relationships['join_chains']:
             is_longest = True
@@ -284,26 +298,28 @@ class AlchemyMixin(object):
                     continue
             if is_longest:
                 longest_chains.append((chain_a_ext, chain_a_is_outer or chain_b_is_outer))
-        if longest_chains:
-            query = query.distinct()
-            for chain, chain_is_outer in longest_chains:
-                for alias, relation in chain:
-                    query = query.join((alias, relation), from_joinpoint=True, isouter=chain_is_outer)
-                query = query.reset_joinpoint()
-        if expressions is not None:
-            query = query.filter(expressions)
-        return query
+        if not longest_chains:
+            return query
+        for chain, chain_is_outer in longest_chains:
+            for alias, relation in chain:
+                query = query.join((alias, relation), from_joinpoint=True, isouter=chain_is_outer)
+            query = query.reset_joinpoint()
+        return query.distinct() if distinct else query
 
     def _build_filter_expressions(self, conditions, default_op, relationships):
-        column = None
-        column_name = None
-        obj_class = self.objects_class
-        mapper = inspect(obj_class)
-        column_alias = None
-        join_chain = []
-        join_chain_ext = []
-        join_is_outer = False
+        """
+        :param conditions: conditions dictionary
+        :type conditions: dict
 
+        :param default_op: a default operator to join all filter expressions
+        :type default_op: function
+
+        :param relationships:  a dict with all joins to apply, describes current state in recurrent calls
+        :type relationships: dict
+
+        :return: expressions list
+        :rtype: list
+        """
         if default_op is None:
             default_op = and_
 
@@ -329,67 +345,69 @@ class AlchemyMixin(object):
                 subexpressions = self._build_filter_expressions(value, op, relationships)
                 expressions.append(subexpressions)
                 continue
-            tokens = arg.split('__')
-            for index, token in enumerate(tokens):
-                if column_name is not None and token in self._underscore_operators:
-                    op = self._underscore_operators[token]
-                    if op in [operators.between_op, operators.in_op]:
-                        if not isinstance(value, list):
-                            value = value.split(self.MULTIVALUE_SEPARATOR)
-                    if isinstance(value, list):
-                        value = list(map(lambda x: self.deserialize_column(column, x), value))
-                    else:
-                        value = self.deserialize_column(column, value)
-                    if op == Function:
-                        expression = column_name
-                        if len(tokens[index+1:]) > 1:
-                            for func_name in tokens[index+1:-1]:
-                                expression = Function(func_name, expression)
-                        expression = Function(tokens[-1], expression, value)
-                    else:
-                        expression = op(column_name, value)
-                    expressions.append(expression)
-                    if token == 'isnull':
-                        join_is_outer = True
-                    # reset column_name, otherwise a default eq operator would be applied
-                    column_name = None
-                    break
-                if token in mapper.relationships:
-                    # follow the relation and change current obj_class and mapper
-                    obj_class = mapper.relationships[token].mapper.class_
-                    mapper = mapper.relationships[token].mapper
-                    column_alias, is_new_alias = self.next_alias(relationships['aliases'], mapper.local_table.name,
-                                                                 obj_class)
-                    join_chain.append(token)
-                    join_chain_ext.append((column_alias, token))
-                    continue
-                if token not in mapper.column_attrs:
-                    # if token is not an op or relation it has to be a valid column
-                    raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                column_name = getattr(obj_class if column_alias is None else column_alias, token)
-                """:type column: sqlalchemy.schema.Column"""
-                column = mapper.columns[token]
-            if column_name is not None:
-                # if last token was a column, not an op, assume it's equality
-                # if it was a relation it's just going to be ignored
-                value = self.deserialize_column(column, value)
-                expressions.append(operators.eq(column_name, value))
-            # reset everything back to main object
-            column_name = None
-            obj_class = self.objects_class
-            mapper = inspect(obj_class)
-            column_alias = None
-            if join_chain:
-                relationships['join_chains'].append((join_chain, join_chain_ext, join_is_outer))
-                join_chain = []
-                join_chain_ext = []
-                join_is_outer = False
+            expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
+                                            lambda c, n, v: operators.eq(n, self.deserialize_column(c, v)))
+            if expression is not None:
+                expressions.append(expression)
         result = None
         if len(expressions) > 1:
             result = default_op(*expressions) if default_op != not_ else not_(and_(*expressions))
         elif len(expressions) == 1:
             result = expressions[0] if default_op != not_ else not_(expressions[0])
         return result
+
+    def _parse_tokens(self, obj_class, tokens, value, relationships, default_expression=None):
+        column_name = None
+        column = None
+        column_alias = None
+        mapper = inspect(obj_class)
+        join_chain = []
+        join_chain_ext = []
+        join_is_outer = False
+        for index, token in enumerate(tokens):
+            if column_name is not None and token in self._underscore_operators:
+                op = self._underscore_operators[token]
+                if op in [operators.between_op, operators.in_op]:
+                    if not isinstance(value, list):
+                        value = value.split(self.MULTIVALUE_SEPARATOR)
+                if isinstance(value, list):
+                    value = list(map(lambda x: self.deserialize_column(column, x), value))
+                else:
+                    value = self.deserialize_column(column, value)
+                if op == Function:
+                    expression = column_name
+                    if len(tokens[index+1:]) > 1:
+                        for func_name in tokens[index+1:-1]:
+                            expression = Function(func_name, expression)
+                    expression = Function(tokens[-1], expression, value)
+                else:
+                    expression = op(column_name, value)
+                if token == 'isnull':
+                    join_is_outer = True
+                if join_chain:
+                    relationships['join_chains'].append((join_chain, join_chain_ext, join_is_outer))
+                return expression
+            if token in mapper.relationships:
+                # follow the relation and change current obj_class and mapper
+                obj_class = mapper.relationships[token].mapper.class_
+                mapper = mapper.relationships[token].mapper
+                column_alias, is_new_alias = self.next_alias(relationships['aliases'], token, obj_class)
+                join_chain.append(token)
+                join_chain_ext.append((column_alias, token))
+                continue
+            if token not in mapper.column_attrs:
+                # if token is not an op or relation it has to be a valid column
+                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected'
+                                                          'to be a known column name'.format('__'.join(tokens), token))
+            column_name = getattr(obj_class if column_alias is None else column_alias, token)
+            """:type column: sqlalchemy.schema.Column"""
+            column = mapper.columns[token]
+        if join_chain:
+            relationships['join_chains'].append((join_chain, join_chain_ext, join_is_outer))
+        if column_name is not None and default_expression is not None:
+            # if last token was a relation it's just going to be ignored
+            return default_expression(column, column_name, value)
+        return None
 
     @staticmethod
     def next_alias(aliases, name, obj_class, use_existing=True):
@@ -413,11 +431,27 @@ class AlchemyMixin(object):
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
-        column = None
-        column_name = None
-        obj_class = self.objects_class
-        mapper = inspect(obj_class)
+        relationships = {
+            'aliases': {},
+            'join_chains': [],
+        }
+        expressions = self._build_order_expressions(criteria, relationships)
+        query = self._apply_joins(query, relationships, distinct=False)
+        if expressions is not None:
+            query = query.order_by(*expressions)
+        return query
 
+    def _build_order_expressions(self, criteria, relationships):
+        """
+        :param criteria: criteria dictionary
+        :type criteria: dict
+
+        :param relationships:  a dict with all joins to apply, describes current state in recurrent calls
+        :type relationships: dict
+
+        :return: expressions list
+        :rtype: list
+        """
         expressions = []
 
         if isinstance(criteria, dict):
@@ -431,54 +465,11 @@ class AlchemyMixin(object):
             if len(arg) and arg[0] == '+' or arg[0] == '-':
                 is_ascending = arg[:1] == '+'
                 arg = arg[1:]
-            tokens = arg.split('__')
-            for index, token in enumerate(tokens):
-                if column_name is not None and token in self._underscore_operators:
-                    op = self._underscore_operators[token]
-                    if op in [operators.between_op, operators.in_op]:
-                        if not isinstance(value, list):
-                            value = value.split(self.MULTIVALUE_SEPARATOR)
-                    if value:
-                        if isinstance(value, list):
-                            value = list(map(lambda x: self.deserialize_column(column, x), value))
-                        else:
-                            value = self.deserialize_column(column, value)
-                    if op == Function:
-                        expression = column_name
-                        if len(tokens[index+1:]) > 1:
-                            for func_name in tokens[index+1:-1]:
-                                expression = Function(func_name, expression)
-                        expression = Function(tokens[-1], expression, value)
-                    else:
-                        expression = op(column_name, value)
-                    expressions.append(expression if is_ascending else desc(expression))
-                    # reset column_name, otherwise a default eq operator would be applied
-                    column_name = None
-                    break
-                if token in mapper.relationships:
-                    # follow the relation and change current obj_class and mapper
-                    obj_class = mapper.relationships[token].mapper.class_
-                    mapper = mapper.relationships[token].mapper
-                    query = query.distinct().join(token, aliased=True, from_joinpoint=True)
-                    continue
-                if token not in mapper.column_attrs:
-                    # if token is not an op or relation it has to be a valid column
-                    raise HTTPBadRequest('Invalid attribute', 'Order attribute {} is invalid'.format(arg))
-                column_name = getattr(obj_class, token, None)
-                """:type column: sqlalchemy.schema.Column"""
-                column = mapper.columns[token]
-            if column_name is not None:
-                # if last token was a relation it's just going to be ignored
-                expressions.append(column if is_ascending else column.desc())
-            if expressions:
-                query = query.order_by(*expressions)
-                expressions = []
-            query = query.reset_joinpoint()
-            # reset everything back to main object
-            column_name = None
-            obj_class = self.objects_class
-            mapper = inspect(obj_class)
-        return query
+            expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
+                                            lambda c, n, v: n)
+            if expression is not None:
+                expressions.append(expression if is_ascending else desc(expression))
+        return expressions
 
     def clean_relations(self, relations):
         """
@@ -686,6 +677,12 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         if relations is None or len(relations):
             query = query.options(subqueryload('*') if relations is None else subqueryload(*relations))
+        if self.PARAM_SEARCH in req.params:
+            try:
+                req.params.update(json.loads(req.params.pop(self.PARAM_SEARCH)))
+            except ValueError:
+                raise HTTPBadRequest('Invalid attribute',
+                                     'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if order:
             if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
@@ -696,22 +693,40 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                     pass
             if not isinstance(order, list) and not isinstance(order, dict):
                 order = [order]
-            query = self.order_by(query, order)
-        else:
-            primary_keys = inspect(self.objects_class).primary_key
-            query = query.order_by(*primary_keys)
-        if self.PARAM_SEARCH in req.params:
-            try:
-                req.params.update(json.loads(req.params.pop(self.PARAM_SEARCH)))
-            except ValueError:
-                raise HTTPBadRequest('Invalid attribute',
-                                     'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
-        return self.filter_by(query, req.params)
-
-    def get_total_objects(self, queryset):
+            return self.filter_by(query, req.params, order)
         primary_keys = inspect(self.objects_class).primary_key
-        count_q = queryset.statement.with_only_columns([func.count(*primary_keys)]).order_by(None)
-        return queryset.session.execute(count_q).scalar()
+        return self.filter_by(query, req.params).order_by(*primary_keys)
+
+    def get_total_objects(self, queryset, totals):
+        stmt = self._build_total_expressions(queryset, totals)
+        result = queryset.session.execute(stmt).first()
+        if result is None:
+            return {}
+        return {'total_' + key: value for key, value in result.items()}
+
+    def _build_total_expressions(self, queryset, totals):
+        mapper = inspect(self.objects_class)
+        primary_keys = mapper.primary_key
+        relationships = {
+            'aliases': {},
+            'join_chains': [],
+        }
+        aggregates = []
+        for total in totals:
+            for aggregate, columns in total.items():
+                if columns:
+                    if not isinstance(columns, list):
+                        columns = [columns]
+                    for column in columns:
+                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, relationships,
+                                                        lambda c, n, v: n)
+                        if expression is not None:
+                            aggregates.append(Function(aggregate, expression).label(aggregate))
+                else:
+                    aggregates.append(Function(aggregate, *primary_keys).label(aggregate))
+        agg_query = self._apply_joins(queryset, relationships, distinct=False)
+        agg_query = agg_query.statement.with_only_columns(aggregates).order_by(None)
+        return agg_query
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
@@ -733,22 +748,23 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             limit = int(limit)
         if offset is not None:
             offset = int(offset)
-        get_total = self.get_param_or_post(req, self.PARAM_TOTAL_COUNT)
+        totals = self.get_param_totals(req)
         # retrieve that param without removing it so self.get_queryset() so it can also use it
         relations = self.clean_relations(req.params.get(self.PARAM_RELATIONS, ''))
 
         with session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
-            total = self.get_total_objects(query) if get_total else None
+            totals = self.get_total_objects(query, totals)
 
             object_list = self.get_object_list(query, limit, offset)
 
             serialized = [self.serialize(obj, relations_include=relations) for obj in object_list]
             result = {
                 'results': serialized,
-                'total': total,
+                'total': totals['total_count'] if 'total_count' in totals else None,
                 'returned': len(serialized),  # avoid calling object_list.count() which executes the query again
             }
+            result.update(totals)
 
         self.render_response(result, req, resp)
 
