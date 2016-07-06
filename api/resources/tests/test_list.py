@@ -70,7 +70,7 @@ class MongoCollectionResourceTest(unittest.TestCase):
         resp = Response()
         resource = mongoengine.CollectionResource(objects_class=Mock(return_value=[1, 2, 3]), max_limit=2)
         resource.get_object_list = Mock(return_value=[1, 2])
-        resource.get_total_objects = Mock(return_value=3)
+        resource.get_total_objects = Mock(return_value={'total_count': 3})
         resource.on_get(req=req, resp=resp)
         self.assertEqual(
             req.context['result'],

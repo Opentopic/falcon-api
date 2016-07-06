@@ -5,7 +5,7 @@ from decimal import Decimal
 import falcon
 import json
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
-from sqlalchemy import inspect, func
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
@@ -227,7 +227,7 @@ class AlchemyMixin(object):
             return float(value)
         return value
 
-    def filter_by(self, query, conditions):
+    def filter_by(self, query, conditions, order_criteria=None):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
@@ -235,10 +235,13 @@ class AlchemyMixin(object):
         :param conditions: conditions dictionary
         :type conditions: dict
 
+        :param order_criteria: optional order criteria
+        :type order_criteria: dict
+
         :return: modified query
         :rtype: sqlalchemy.orm.query.Query
         """
-        return self._filter_or_exclude(query, conditions)
+        return self._filter_or_exclude(query, conditions, order_criteria=order_criteria)
 
     def exclude_by(self, query, conditions):
         """
@@ -253,7 +256,7 @@ class AlchemyMixin(object):
         """
         return self._filter_or_exclude(query, {'not': {'and': conditions}})
 
-    def _filter_or_exclude(self, query, conditions, default_op=None):
+    def _filter_or_exclude(self, query, conditions, default_op=None, order_criteria=None):
         """
         :param query: SQLAlchemy Query object
         :type query: sqlalchemy.orm.query.Query
@@ -272,9 +275,14 @@ class AlchemyMixin(object):
             'join_chains': [],
         }
         expressions = self._build_filter_expressions(conditions, default_op, relationships)
-        query = self._apply_joins(query, relationships)
+        order_expressions = []
+        if order_criteria:
+            order_expressions = self._build_order_expressions(order_criteria, relationships)
+        query = self._apply_joins(query, relationships, distinct=expressions is not None)
         if expressions is not None:
             query = query.filter(expressions)
+        if order_criteria and order_expressions is not None:
+            query = query.order_by(*order_expressions)
         return query
 
     def _apply_joins(self, query, relationships, distinct=True):
@@ -458,7 +466,7 @@ class AlchemyMixin(object):
                 is_ascending = arg[:1] == '+'
                 arg = arg[1:]
             expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
-                                            lambda c, n, v: c)
+                                            lambda c, n, v: n)
             if expression is not None:
                 expressions.append(expression if is_ascending else desc(expression))
         return expressions
@@ -675,7 +683,6 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
-        query = self.filter_by(query, req.params)
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if order:
             if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
@@ -686,16 +693,44 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                     pass
             if not isinstance(order, list) and not isinstance(order, dict):
                 order = [order]
-            query = self.order_by(query, order)
-        else:
-            primary_keys = inspect(self.objects_class).primary_key
-            query = query.order_by(*primary_keys)
-        return query
-
-    def get_total_objects(self, queryset):
+            return self.filter_by(query, req.params, order)
         primary_keys = inspect(self.objects_class).primary_key
-        count_q = queryset.statement.with_only_columns([func.count(*primary_keys)]).order_by(None)
-        return queryset.session.execute(count_q).scalar()
+        return self.filter_by(query, req.params).order_by(*primary_keys)
+
+    def get_total_objects(self, queryset, totals):
+        if not totals:
+            return {}
+        stmt = self._build_total_expressions(queryset, totals)
+        result = queryset.session.execute(stmt).first()
+        if result is None:
+            return {}
+
+        return {'total_' + key: value if not isinstance(value, Decimal) else float(value)
+                for key, value in result.items()}
+
+    def _build_total_expressions(self, queryset, totals):
+        mapper = inspect(self.objects_class)
+        primary_keys = mapper.primary_key
+        relationships = {
+            'aliases': {},
+            'join_chains': [],
+        }
+        aggregates = []
+        for total in totals:
+            for aggregate, columns in total.items():
+                if columns:
+                    if not isinstance(columns, list):
+                        columns = [columns]
+                    for column in columns:
+                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, relationships,
+                                                        lambda c, n, v: n)
+                        if expression is not None:
+                            aggregates.append(Function(aggregate, expression).label(aggregate))
+                else:
+                    aggregates.append(Function(aggregate, *primary_keys).label(aggregate))
+        agg_query = self._apply_joins(queryset, relationships, distinct=False)
+        agg_query = agg_query.statement.with_only_columns(aggregates).order_by(None)
+        return agg_query
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
@@ -717,22 +752,23 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             limit = int(limit)
         if offset is not None:
             offset = int(offset)
-        get_total = self.get_param_or_post(req, self.PARAM_TOTAL_COUNT)
+        totals = self.get_param_totals(req)
         # retrieve that param without removing it so self.get_queryset() so it can also use it
         relations = self.clean_relations(req.params.get(self.PARAM_RELATIONS, ''))
 
         with session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
-            total = self.get_total_objects(query) if get_total else None
+            totals = self.get_total_objects(query, totals)
 
             object_list = self.get_object_list(query, limit, offset)
 
             serialized = [self.serialize(obj, relations_include=relations) for obj in object_list]
             result = {
                 'results': serialized,
-                'total': total,
+                'total': totals['total_count'] if 'total_count' in totals else None,
                 'returned': len(serialized),  # avoid calling object_list.count() which executes the query again
             }
+            result.update(totals)
 
         self.render_response(result, req, resp)
 

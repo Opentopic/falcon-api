@@ -145,6 +145,17 @@ def query_ordered(request):
     return request.param
 
 
+@pytest.fixture(params=[
+    ("""[{"sum": ["other_models__id"]}]""",
+     """SELECT sum(other_models_1.id) AS sum %20
+FROM some_table %0A
+JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
+JOIN other_table AS other_models_1 ON other_models_1.id = m2m_table_1.other_model_id"""),
+])
+def query_totals(request):
+    return request.param
+
+
 @pytest.fixture()
 def model():
     model1 = Model()
@@ -189,6 +200,18 @@ def test_order_by(engine, session, query_ordered):
     c = CollectionResource(objects_class=Model, db_engine=engine)
     query_obj = c.order_by(session.query(Model), conditions)
     assert str(query_obj.statement.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
+
+
+def test_totals(engine, session, query_totals):
+    """
+    Test `get_object` func
+    """
+    conditions, expected = query_totals
+    if isinstance(conditions, str):
+        conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
+    c = CollectionResource(objects_class=Model, db_engine=engine)
+    stmt = c._build_total_expressions(session.query(Model), conditions)
+    assert str(stmt.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
 
 
 def test_serialize(model):
