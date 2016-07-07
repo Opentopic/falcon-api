@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='opentopic-falcon-api',
-    version='0.3.2',
+    version='0.3.3',
     author='Tomasz Roszko',
     author_email='tom@opentopic.com',
     description='Base Library for services api endpoints',
