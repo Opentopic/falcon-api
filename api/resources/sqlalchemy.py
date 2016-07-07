@@ -772,20 +772,32 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
         self.render_response(result, req, resp)
 
-    def create(self, req, resp, data):
+    def create(self, req, resp, data, db_session=None):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
-        try:
-            with session_scope(self.db_engine) as db_session:
-                resource = self.save_resource(self.objects_class(), data, db_session)
-                db_session.commit()
-                return self.serialize(resource, relations_include=relations)
-        except (IntegrityError, ProgrammingError) as err:
-            # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
-            # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
-            if isinstance(err, IntegrityError) or err.orig.args[1] == self.VIOLATION_UNIQUE:
-                raise HTTPConflict('Conflict', 'Unique constraint violated')
-            else:
-                raise
+        resource = self.save_resource(self.objects_class(), data, db_session)
+        db_session.commit()
+        return self.serialize(resource, relations_include=relations)
+
+    def on_post(self, req, resp, *args, **kwargs):
+        data = self.deserialize(req.context['doc'] if 'doc' in req.context else None)
+        data, errors = self.clean(data)
+        if errors:
+            result = {'errors': errors}
+            status_code = falcon.HTTP_BAD_REQUEST
+        else:
+            try:
+                with session_scope(self.db_engine) as db_session:
+                    result = self.create(req, resp, data, db_session=db_session)
+            except (IntegrityError, ProgrammingError) as err:
+                # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
+                # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
+                if isinstance(err, IntegrityError) or err.orig.args[1] == self.VIOLATION_UNIQUE:
+                    raise HTTPConflict('Conflict', 'Unique constraint violated')
+                else:
+                    raise
+            status_code = falcon.HTTP_CREATED
+
+        self.render_response(result, req, resp, status_code)
 
 
 class SingleResource(AlchemyMixin, BaseSingleResource):
