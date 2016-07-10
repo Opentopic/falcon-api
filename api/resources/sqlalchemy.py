@@ -371,7 +371,7 @@ class AlchemyMixin(object):
                 if not callable(query_method):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
                                                               'can\'t provide a query'.format('__'.join(tokens)))
-                return query_method(column_alias, column_name, value)
+                return query_method(column_alias=column_alias, column_name=column_name, value=value)
             if column_name is not None and token in self._underscore_operators:
                 op = self._underscore_operators[token]
                 if op in [operators.between_op, operators.in_op]:
@@ -404,7 +404,7 @@ class AlchemyMixin(object):
                 continue
             if token not in mapper.column_attrs:
                 # if token is not an op or relation it has to be a valid column
-                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected'
+                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected '
                                                           'to be a known column name'.format('__'.join(tokens), token))
             column_name = getattr(column_alias, token)
             """:type column: sqlalchemy.schema.Column"""
