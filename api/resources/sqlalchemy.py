@@ -371,7 +371,7 @@ class AlchemyMixin(object):
                 if not callable(query_method):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
                                                               'can\'t provide a query'.format('__'.join(tokens)))
-                return query_method(column_alias, value)
+                return query_method(column_alias, column_name, value)
             if column_name is not None and token in self._underscore_operators:
                 op = self._underscore_operators[token]
                 if op in [operators.between_op, operators.in_op]:
