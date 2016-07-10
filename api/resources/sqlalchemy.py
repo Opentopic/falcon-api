@@ -52,6 +52,7 @@ class AlchemyMixin(object):
         'range':        operators.between_op,
         'in':           operators.in_op,
         'contains':     operators.contains_op,
+        'match':        operators.match_op,
         'iexact':       operators.ilike_op,
         'startswith':   operators.startswith_op,
         'endswith':     operators.endswith_op,
@@ -365,6 +366,12 @@ class AlchemyMixin(object):
         join_chain_ext = []
         join_is_outer = False
         for index, token in enumerate(tokens):
+            if token == CollectionResource.PARAM_TEXT_QUERY:
+                query_method = getattr(obj_class, 'get_term_query', None)
+                if not callable(query_method):
+                    raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
+                                                              'can\'t provide a query'.format('__'.join(tokens)))
+                return query_method(column_alias, value)
             if column_name is not None and token in self._underscore_operators:
                 op = self._underscore_operators[token]
                 if op in [operators.between_op, operators.in_op]:
