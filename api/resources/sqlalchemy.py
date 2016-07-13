@@ -305,15 +305,17 @@ class AlchemyMixin(object):
         longest_chains = []
         for chain_a, chain_a_ext, chain_a_is_outer in relationships['join_chains']:
             is_longest = True
-            chain_b_is_outer = False
+            any_is_outer = chain_a_is_outer
             for chain_b, chain_b_ext, chain_b_is_outer in relationships['join_chains']:
                 if chain_a == chain_b:
+                    if chain_b_is_outer:
+                        any_is_outer = True
                     continue
                 if set(chain_a).issubset(chain_b):
                     is_longest = False
-                    continue
-            if is_longest:
-                longest_chains.append((chain_a_ext, chain_a_is_outer or chain_b_is_outer))
+                    break
+            if is_longest and (chain_a_ext, any_is_outer) not in longest_chains:
+                longest_chains.append((chain_a_ext, any_is_outer))
         if not longest_chains:
             return query
         for chain, chain_is_outer in longest_chains:
