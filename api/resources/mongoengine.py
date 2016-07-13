@@ -5,6 +5,7 @@ from api.resources.base import BaseCollectionResource, BaseSingleResource
 
 class CollectionResource(BaseCollectionResource):
     def get_queryset(self, req, resp):
+        query_term = self.get_param_or_post(req, self.PARAM_TEXT_QUERY)
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if self.PARAM_SEARCH in req.params:
             try:
@@ -12,10 +13,11 @@ class CollectionResource(BaseCollectionResource):
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
-
         queryset = self.objects_class.objects(**req.params)
+        if query_term is not None:
+            queryset = queryset.search_text(query_term)
         if order:
-            queryset.order_by(order)
+            queryset = queryset.order_by(order)
         return queryset
 
     def create(self, req, resp, data):

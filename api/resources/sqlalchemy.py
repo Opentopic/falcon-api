@@ -57,6 +57,8 @@ class AlchemyMixin(object):
         'notin':        operators.notin_op,
         'contains':     operators.contains_op,
         'notcontains':  operators.notcontains_op,
+        'match':        operators.match_op,
+        'notmatch':     operators.notmatch_op,
         'iexact':       operators.ilike_op,
         'notiexact':    operators.notilike_op,
         'startswith':   operators.startswith_op,
@@ -373,12 +375,18 @@ class AlchemyMixin(object):
     def _parse_tokens(self, obj_class, tokens, value, relationships, default_expression=None):
         column_name = None
         column = None
-        column_alias = None
+        column_alias = obj_class
         mapper = inspect(obj_class)
         join_chain = []
         join_chain_ext = []
         join_is_outer = False
         for index, token in enumerate(tokens):
+            if token == CollectionResource.PARAM_TEXT_QUERY:
+                query_method = getattr(obj_class, 'get_term_query', None)
+                if not callable(query_method):
+                    raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
+                                                              'can\'t provide a query'.format('__'.join(tokens)))
+                return query_method(self=obj_class, column_alias=column_alias, column_name=column_name, value=value)
             if column_name is not None and token in self._underscore_operators:
                 op = self._underscore_operators[token]
                 if op in [operators.between_op, operators.in_op]:
@@ -411,9 +419,9 @@ class AlchemyMixin(object):
                 continue
             if token not in mapper.column_attrs:
                 # if token is not an op or relation it has to be a valid column
-                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected'
+                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected '
                                                           'to be a known column name'.format('__'.join(tokens), token))
-            column_name = getattr(obj_class if column_alias is None else column_alias, token)
+            column_name = getattr(column_alias, token)
             """:type column: sqlalchemy.schema.Column"""
             column = mapper.columns[token]
         if join_chain:
