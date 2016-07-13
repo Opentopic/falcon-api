@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import falcon
 import json
+
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError, ProgrammingError
@@ -45,19 +46,32 @@ class AlchemyMixin(object):
 
     _underscore_operators = {
         'exact':        operators.eq,
+        'notexact':     operators.ne,
         'gt':           operators.gt,
         'lte':          operators.lt,
         'gte':          operators.ge,
         'le':           operators.le,
         'range':        operators.between_op,
+        'notrange':     operators.notbetween_op,
         'in':           operators.in_op,
+        'notin':        operators.notin_op,
         'contains':     operators.contains_op,
+        'notcontains':  operators.notcontains_op,
         'iexact':       operators.ilike_op,
+        'notiexact':    operators.notilike_op,
         'startswith':   operators.startswith_op,
+        'notstartswith': operators.notstartswith_op,
         'endswith':     operators.endswith_op,
+        'notendswith':  operators.notendswith_op,
+        'hasall': lambda c, x: c.has_all(x),
+        'hasany': lambda c, x: c.has_any(x),
+        'haskey': lambda c, x: c.has_key(x),  # noqa
         'istartswith': lambda c, x: c.ilike(x.replace('%', '%%') + '%'),
+        'notistartswith': lambda c, x: c.notilike(x.replace('%', '%%') + '%'),
         'iendswith': lambda c, x: c.ilike('%' + x.replace('%', '%%')),
+        'notiendswith': lambda c, x: c.notilike('%' + x.replace('%', '%%')),
         'isnull': lambda c, x: c.is_(None) if x else c.isnot(None),
+        'isnotnull': lambda c, x: c.isnot(None) if x else c.is_(None),
         'year': lambda c, x: extract('year', c) == x,
         'month': lambda c, x: extract('month', c) == x,
         'day': lambda c, x: extract('day', c) == x,
