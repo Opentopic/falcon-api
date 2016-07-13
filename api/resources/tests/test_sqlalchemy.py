@@ -366,3 +366,35 @@ def test_update_resource(model, session):
     assert model.other_models[0].name == 'other_model1_prim'
     assert model.other_models[1].id == 4
     assert model.other_models[1].name == 'other_model3'
+
+
+def test_update_resource2(model, session):
+    # save the example model to the db
+    session.add(model)
+    session.commit()
+    # update it so some related models should be added, updated and removed
+    alchemy = AlchemyMixin()
+    other_model = session.query(OtherModel).get(2)
+    data = {
+        'name': 'other_model1_prim2',
+        'third_models': [
+            {
+                'id': 4,
+                'other_model_id': 2,
+                'name': 'third_model1_prim',
+            },
+            # have to include second model even without change because otherwise it would get removed
+            # and one to many objects cannot be disassociated (not null constraint on FK)
+            {
+                'id': 5,
+                'other_model_id': 2,
+                'name': 'third_model2',
+            }
+        ]
+    }
+    alchemy.save_resource(other_model, data, session)
+    session.commit()
+    other_model = session.query(OtherModel).get(2)
+    assert other_model.name == 'other_model1_prim2'
+    assert other_model.third_models[0].name == 'third_model1_prim'
+    assert other_model.third_models[1].name == 'third_model2'
