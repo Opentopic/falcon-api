@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
-from sqlalchemy.sql import sqltypes, operators, extract
+from sqlalchemy.sql import sqltypes, operators, extract, func
 from sqlalchemy.sql.expression import and_, or_, not_, desc
 from sqlalchemy.sql.functions import Function
 
@@ -388,7 +388,8 @@ class AlchemyMixin(object):
                 if not callable(query_method):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
                                                               'can\'t provide a query'.format('__'.join(tokens)))
-                return query_method(self=obj_class, column_alias=column_alias, column_name=column_name, value=value)
+                return query_method(self=obj_class, column_alias=column_alias, column_name=column_name, value=value,
+                                    default_op=or_ if tokens[-1] == 'or' else and_)
             if column_name is not None and token in self._underscore_operators:
                 op = self._underscore_operators[token]
                 if op in [operators.between_op, operators.in_op]:
@@ -432,6 +433,17 @@ class AlchemyMixin(object):
             # if last token was a relation it's just going to be ignored
             return default_expression(column, column_name, value)
         return None
+
+    @staticmethod
+    def get_tsquery(value, default_op):
+        if isinstance(value, list):
+            tq = func.plainto_tsquery('english', value.pop())
+            while len(list):
+                if default_op == or_:
+                    tq = tq.op('||' if default_op == or_ else '&&')(func.plainto_tsquery('english', value.pop()))
+        else:
+            tq = func.plainto_tsquery('english', value)
+        return tq
 
     @staticmethod
     def next_alias(aliases, name, obj_class, use_existing=True):

@@ -2,6 +2,8 @@ import json
 from collections import OrderedDict
 
 import pytest
+from sqlalchemy.sql.elements import or_
+from sqlalchemy.sql.functions import Function
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, ForeignKey, Table
 from sqlalchemy.orm import relationship
@@ -25,6 +27,12 @@ class Model(Base):
     name = Column(String)
 
     other_models = relationship('OtherModel', secondary=m2m_table, back_populates='models')
+
+    def get_term_query(self, column_alias, column_name, value, default_op=or_):
+        tq = AlchemyMixin.get_tsquery(value, default_op)
+        if column_name is None:
+            column_name = column_alias.name
+        return Function('to_tsvector', column_name).op('@@')(tq)
 
 
 class OtherModel(Base):
