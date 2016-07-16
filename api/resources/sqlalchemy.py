@@ -440,7 +440,7 @@ class AlchemyMixin(object):
     def get_tsquery(value, default_op):
         if isinstance(value, list):
             tq = func.plainto_tsquery('english', value.pop())
-            while len(list):
+            while len(value):
                 if default_op == or_:
                     tq = tq.op('||' if default_op == or_ else '&&')(func.plainto_tsquery('english', value.pop()))
         else:
