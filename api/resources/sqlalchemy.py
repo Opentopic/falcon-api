@@ -395,10 +395,12 @@ class AlchemyMixin(object):
                 if op in [operators.between_op, operators.in_op]:
                     if not isinstance(value, list):
                         value = value.split(self.MULTIVALUE_SEPARATOR)
-                if isinstance(value, list):
-                    value = list(map(lambda x: self.deserialize_column(column, x), value))
-                else:
-                    value = self.deserialize_column(column, value)
+                # isnull is the only operator where the value is not of the same type as the column
+                if token != 'isnull' and token != 'isnotnull':
+                    if isinstance(value, list):
+                        value = list(map(lambda x: self.deserialize_column(column, x), value))
+                    else:
+                        value = self.deserialize_column(column, value)
                 if op == Function:
                     expression = column_name
                     if len(tokens[index+1:]) > 1:
