@@ -458,7 +458,8 @@ class AlchemyMixin(object):
                 is_new = False
             else:
                 aliases[name]['number'] += 1
-                aliases[name]['aliased'].append(aliased(obj_class, name=prefix + name + '_' + str(aliases[name]['number'])))
+                aliases[name]['aliased'].append(
+                    aliased(obj_class, name=prefix + name + '_' + str(aliases[name]['number'])))
         else:
             aliases[name] = {'number': 1,
                              'aliased': [aliased(obj_class, name=prefix + name + '_1')]}
