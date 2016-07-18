@@ -112,7 +112,8 @@ WHERE other_models_1.name = ? OR third_models_1.name = ?"""),
                          "id": 0}}]}""",
      """SELECT some_table.id, some_table.name %20
 FROM some_table %20
-WHERE some_table.name = ? AND some_table.id = ? OR some_table.name = ? AND some_table.id = ? OR some_table.name = ? AND some_table.id = ?"""),  # noqa
+WHERE some_table.name = ? AND some_table.id = ? OR some_table.name = ? AND some_table.id = ? %0A
+OR some_table.name = ? AND some_table.id = ?"""),
     ("""{"and": [{"or": {"name": "value",
                          "id": 20}},
                  {"or": {"name": "value3",
@@ -132,6 +133,14 @@ WHERE other_models_1.name IS NOT NULL"""),
      """SELECT some_table.id, some_table.name %20
 FROM some_table %20
 WHERE other_func(first_func(some_table.name), ?) AND single_func(some_table.name, ?)"""),
+    ("""{"and": {"q": "value2",
+                 "q__or": ["value", "value2"],
+                 "q__and": ["one", "two", "three"]}}""",
+     """SELECT some_table.id, some_table.name %20
+FROM some_table %20
+WHERE (to_tsvector(some_table.name) @@ plainto_tsquery(?, ?)) %0A
+AND (to_tsvector(some_table.name) @@ (plainto_tsquery(?, ?) || plainto_tsquery(?, ?))) %0A
+AND (to_tsvector(some_table.name) @@ ((plainto_tsquery(?, ?) && plainto_tsquery(?, ?)) && plainto_tsquery(?, ?)))"""),
 ])
 def query_filtered(request):
     return request.param
