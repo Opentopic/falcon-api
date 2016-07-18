@@ -153,17 +153,14 @@ class AlchemyMixin(object):
                 relations_ignore.append(relation.back_populates)
             if relation.direction == MANYTOONE:
                 data[relation.key] = self.serialize(rel_obj, relations_level=relations_level - 1,
-                                                    relations_ignore=relations_ignore,
-                                                    relations_include=relations_include)
+                                                    relations_ignore=relations_ignore)
             elif not relation.uselist:
                 data.update(self.serialize(rel_obj, skip_primary_key=True, relations_level=relations_level - 1,
-                                           relations_ignore=relations_ignore,
-                                           relations_include=relations_include))
+                                           relations_ignore=relations_ignore))
             else:
                 data[relation.key] = {
                     rel.id: self.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1,
-                                           relations_ignore=relations_ignore,
-                                           relations_include=relations_include)
+                                           relations_ignore=relations_ignore)
                     for rel in rel_obj
                 }
         return data
