@@ -525,6 +525,7 @@ class AlchemyMixin(object):
             return None
         elif isinstance(relations, str):
             return [relations]
+        return relations
 
     @staticmethod
     def save_resource(obj, data, db_session):
