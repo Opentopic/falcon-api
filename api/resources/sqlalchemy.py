@@ -521,7 +521,7 @@ class AlchemyMixin(object):
         :type relations: str | list
 
         :return: either a list (may be empty) or None if all relations should be included
-        :rtype: list | None
+        :rtype: list[str] | None
         """
         if relations == '':
             return []
@@ -719,7 +719,11 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         query = db_session.query(self.objects_class)
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         if relations is None or len(relations):
-            query = query.options(subqueryload('*') if relations is None else subqueryload(*relations))
+            if relations is None:
+                query = query.options(subqueryload('*'))
+            else:
+                for relation in relations:
+                    query = query.options(subqueryload(relation))
         if self.PARAM_SEARCH in req.params:
             try:
                 req.params.update(json.loads(req.params.pop(self.PARAM_SEARCH)))
