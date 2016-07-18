@@ -161,7 +161,7 @@ class AlchemyMixin(object):
                 data[relation.key] = {
                     rel.id: self.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1,
                                            relations_ignore=relations_ignore)
-                    for rel in rel_obj
+                    for rel in rel_obj if hasattr(rel_obj, 'id')
                 }
         return data
 
