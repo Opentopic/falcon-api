@@ -155,10 +155,10 @@ def query_ordered(request):
 
 @pytest.fixture(params=[
     ("""[{"sum": ["other_models__id"]}]""",
-     """SELECT sum(other_models_1.id) AS sum %20
+     """SELECT sum(totals_other_models_1.id) AS sum %20
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
-JOIN other_table AS other_models_1 ON other_models_1.id = m2m_table_1.other_model_id"""),
+JOIN other_table AS totals_other_models_1 ON totals_other_models_1.id = m2m_table_1.other_model_id"""),
 ])
 def query_totals(request):
     return request.param

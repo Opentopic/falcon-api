@@ -352,7 +352,8 @@ class AlchemyMixin(object):
                         if not isinstance(subconditions, dict):
                             raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
                         subexpressions = self._build_filter_expressions(subconditions, and_, relationships)
-                        parts.append(subexpressions)
+                        if subexpressions is not None:
+                            parts.append(subexpressions)
                     if len(parts) > 1:
                         expressions.append(op(*parts) if op != not_ else not_(and_(*parts)))
                     elif len(parts) == 1:
@@ -361,7 +362,8 @@ class AlchemyMixin(object):
                 if not isinstance(value, dict):
                     raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
                 subexpressions = self._build_filter_expressions(value, op, relationships)
-                expressions.append(subexpressions)
+                if subexpressions is not None:
+                    expressions.append(subexpressions)
                 continue
             expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
                                             lambda c, n, v: operators.eq(n, self.deserialize_column(c, v)))
@@ -418,7 +420,8 @@ class AlchemyMixin(object):
                 # follow the relation and change current obj_class and mapper
                 obj_class = mapper.relationships[token].mapper.class_
                 mapper = mapper.relationships[token].mapper
-                column_alias, is_new_alias = self.next_alias(relationships['aliases'], token, obj_class)
+                column_alias, is_new_alias = self.next_alias(relationships['aliases'], token, obj_class,
+                                                             prefix=relationships.get('prefix', ''))
                 join_chain.append(token)
                 join_chain_ext.append((column_alias, token))
                 continue
@@ -448,17 +451,17 @@ class AlchemyMixin(object):
         return tq
 
     @staticmethod
-    def next_alias(aliases, name, obj_class, use_existing=True):
+    def next_alias(aliases, name, obj_class, use_existing=True, prefix=''):
         is_new = True
         if name in aliases:
             if use_existing:
                 is_new = False
             else:
                 aliases[name]['number'] += 1
-                aliases[name]['aliased'].append(aliased(obj_class, name=name + '_' + str(aliases[name]['number'])))
+                aliases[name]['aliased'].append(aliased(obj_class, name=prefix + name + '_' + str(aliases[name]['number'])))
         else:
             aliases[name] = {'number': 1,
-                             'aliased': [aliased(obj_class, name=name + '_1')]}
+                             'aliased': [aliased(obj_class, name=prefix + name + '_1')]}
         return aliases[name]['aliased'][-1], is_new
 
     def order_by(self, query, criteria):
@@ -753,6 +756,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         relationships = {
             'aliases': {},
             'join_chains': [],
+            'prefix': 'totals_',
         }
         aggregates = []
         for total in totals:
