@@ -7,6 +7,7 @@ import json
 
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
 from sqlalchemy import inspect
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
@@ -125,6 +126,8 @@ class AlchemyMixin(object):
             if skip_primary_key and column.primary_key:
                 continue
             if skip_foreign_keys and len(column.foreign_keys):
+                continue
+            if column.type == TSVECTOR:
                 continue
             data[key] = self.serialize_column(column, getattr(obj, key))
 
