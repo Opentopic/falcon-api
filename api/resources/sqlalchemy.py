@@ -127,7 +127,7 @@ class AlchemyMixin(object):
                 continue
             if skip_foreign_keys and len(column.foreign_keys):
                 continue
-            if column.type == TSVECTOR:
+            if isinstance(column.type, TSVECTOR):
                 continue
             data[key] = self.serialize_column(column, getattr(obj, key))
 
