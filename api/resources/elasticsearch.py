@@ -7,11 +7,135 @@ from falcon import HTTPBadRequest, HTTPNotFound
 
 
 class ElasticSearchMixin(object):
-    def filter_by(self, query, conditions):
-        return query
+    _underscore_operators = {
+        'exact':        'term',
+        'notexact':     'term',
+        'gt':           'range',
+        'lte':          'range',
+        'gte':          'range',
+        'le':           'range',
+        'range':        'range',
+        'notrange':     'range',
+        'in':           'terms',
+        'notin':        'terms',
+        'contains':     'wildcard',
+        'notcontains':  'wildcard',
+        'match':        'match',
+        'notmatch':     'match',
+        'startswith':   'prefix',
+        'notstartswith': 'prefix',
+        'endswith':     'wildcard',
+        'notendswith':  'wildcard',
+        'isnull': 'missing',
+        'isnotnull': 'exists',
+    }
+    _logical_operators = {
+        'or': 'should',
+        'and': 'must',
+        'not': 'must_not',
+    }
 
     def serialize(self, obj):
         return obj.to_dict()
+
+    def filter_by(self, query, conditions):
+        expressions = self._build_filter_expressions(conditions, None)
+        return query.update_from_dict({'query': {'constant_score': {'filter': expressions}}})
+
+    def _build_filter_expressions(self, conditions, default_op):
+        """
+        :param conditions: conditions dictionary
+        :type conditions: dict
+
+        :param default_op: a default operator to join all filter expressions
+        :type default_op: function
+
+        :return: expressions list
+        :rtype: list
+        """
+        if default_op is None:
+            default_op = 'must'
+
+        expressions = []
+
+        for arg, value in conditions.items():
+            if arg in self._logical_operators:
+                op = self._logical_operators[arg]
+                if isinstance(value, list):
+                    parts = []
+                    for subconditions in value:
+                        if not isinstance(subconditions, dict):
+                            raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+                        subexpressions = self._build_filter_expressions(subconditions, 'must')
+                        if subexpressions is not None:
+                            parts.append(subexpressions)
+                    if len(parts) > 1:
+                        expressions.append({'bool': {op: parts}})
+                    elif len(parts) == 1:
+                        expressions.append(parts[0] if op != 'must_not' else {'bool': {'must_not': parts[0]}})
+                    continue
+                if not isinstance(value, dict):
+                    raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+                subexpressions = self._build_filter_expressions(value, op)
+                if subexpressions is not None:
+                    expressions.append(subexpressions)
+                continue
+            expression = self._parse_tokens(self.objects_class, arg.split('__'), value, lambda n, v: {'term': {n: v}})
+            if expression is not None:
+                expressions.append(expression)
+        result = None
+        if len(expressions) > 1:
+            result = {'bool': {default_op: expressions}}
+        elif len(expressions) == 1:
+            result = expressions[0] if default_op != 'must_not' else {'bool': {'must_not': expressions[0]}}
+        return result
+
+    def _parse_tokens(self, obj_class, tokens, value, default_expression=None):
+        column_name = None
+        for index, token in enumerate(tokens):
+            if token == CollectionResource.PARAM_TEXT_QUERY:
+                query_method = getattr(obj_class, 'get_term_query', None)
+                if not callable(query_method):
+                    raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
+                                                              'can\'t provide a query'.format('__'.join(tokens)))
+                return query_method(self=obj_class, column_name=column_name, value=value,
+                                    default_op='should' if tokens[-1] == 'or' else 'must')
+            if column_name is not None and token in self._underscore_operators:
+                op = self._underscore_operators[token]
+                if token in ['range', 'in']:
+                    if not isinstance(value, list):
+                        value = [value]
+                if op in ['missing', 'exists']:
+                    expression = {op: {'field': column_name}}
+                elif op == 'range':
+                    if token != 'range':
+                        expression = {op: {column_name: {token: value}}}
+                    else:
+                        expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}}}
+                elif op == 'wildcard':
+                    expression = {op: {column_name: '*' + value +
+                                                    ('*' if token == 'contains' or token == 'notcontains' else '')}}
+                else:
+                    expression = {op: {column_name: value}}
+                if op.startswith('not'):
+                    expression = {'bool': {'must_not': expression}}
+                return expression
+            if token not in obj_class._doc_type.mapping:
+                # if token is not an op it has to be a valid column
+                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected '
+                                                          'to be a known column name'.format('__'.join(tokens), token))
+            column_name = token
+        if column_name is not None and default_expression is not None:
+            # if last token was a relation it's just going to be ignored
+            return default_expression(column_name, value)
+        return None
+
+    def get_match_query(self, value, default_op):
+        if isinstance(value, list):
+            tq = {'query': ' '.join(value), 'operator': 'or' if default_op == 'should' else 'and'}
+        else:
+            tq = value
+        return tq
 
 
 class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
