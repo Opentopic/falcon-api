@@ -408,7 +408,10 @@ class AlchemyMixin(object):
                     if len(tokens[index+1:]) > 1:
                         for func_name in tokens[index+1:-1]:
                             expression = Function(func_name, expression)
-                    expression = Function(tokens[-1], expression, value)
+                    if tokens[-1] in self._underscore_operators:
+                        expression = self._underscore_operators[tokens[-1]](expression, value)
+                    else:
+                        expression = Function(tokens[-1], expression, value)
                 else:
                     expression = op(column_name, value)
                 if token == 'isnull':
