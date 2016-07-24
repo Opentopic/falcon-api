@@ -582,7 +582,8 @@ class AlchemyMixin(object):
             else:
                 rel_obj = getattr(obj, key)
                 if isinstance(value, dict):
-                    if pk not in value or rel_obj is None:
+                    relationship = mapper.relationships[key]
+                    if relationship.direction != MANYTOONE and (pk not in value or rel_obj is None):
                         setattr(obj, key, AlchemyMixin.update_or_create(db_session, related_mapper, value))
                     else:
                         AlchemyMixin.save_resource(rel_obj, value, db_session)
