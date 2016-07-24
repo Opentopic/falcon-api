@@ -396,7 +396,7 @@ class AlchemyMixin(object):
                 op = self._underscore_operators[token]
                 if op in [operators.between_op, operators.in_op]:
                     if not isinstance(value, list):
-                        value = value.split(self.MULTIVALUE_SEPARATOR)
+                        value = [value]
                 # isnull is the only operator where the value is not of the same type as the column
                 if token != 'isnull' and token != 'isnotnull':
                     if isinstance(value, list):
