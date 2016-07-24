@@ -69,7 +69,7 @@ class AlchemyMixin(object):
         'hasall': lambda c, x: c.has_all(x),
         'hasany': lambda c, x: c.has_any(x),
         'haskey': lambda c, x: c.has_key(x),  # noqa
-        'overlap': lambda c, x: c.overlap(x),
+        'overlap': lambda c, x: c.op('&&')(x),
         'istartswith': lambda c, x: c.ilike(x.replace('%', '%%') + '%'),
         'notistartswith': lambda c, x: c.notilike(x.replace('%', '%%') + '%'),
         'iendswith': lambda c, x: c.ilike('%' + x.replace('%', '%%')),
