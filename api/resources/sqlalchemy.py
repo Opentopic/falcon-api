@@ -224,8 +224,8 @@ class AlchemyMixin(object):
                     if relation.direction == MANYTOONE or relation.uselist or key not in relation.mapper.columns:
                         continue
                     if relation.key not in attributes:
-                        attributes[relation.key] = []
-                    attributes[relation.key].append(self.deserialize_column(relation.mapper.columns[key], value))
+                        attributes[relation.key] = {}
+                    attributes[relation.key][key] = self.deserialize_column(relation.mapper.columns[key], value)
 
         return attributes
 
@@ -582,7 +582,9 @@ class AlchemyMixin(object):
             else:
                 rel_obj = getattr(obj, key)
                 if isinstance(value, dict):
-                    if pk not in value or rel_obj is None:
+                    relationship = mapper.relationships[key]
+                    if (relationship.direction == MANYTOONE or relationship.uselist)\
+                            and (pk not in value or rel_obj is None):
                         setattr(obj, key, AlchemyMixin.update_or_create(db_session, related_mapper, value))
                     else:
                         AlchemyMixin.save_resource(rel_obj, value, db_session)
