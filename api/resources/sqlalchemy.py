@@ -844,7 +844,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             except (IntegrityError, ProgrammingError) as err:
                 # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
                 # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
-                if isinstance(err, IntegrityError) or err.orig.args[1] == self.VIOLATION_UNIQUE:
+                if isinstance(err, IntegrityError)\
+                        or (len(err.orig.args) > 1 and err.orig.args[1] == self.VIOLATION_UNIQUE):
                     raise HTTPConflict('Conflict', 'Unique constraint violated')
                 else:
                     raise
