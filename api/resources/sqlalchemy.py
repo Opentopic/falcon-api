@@ -69,6 +69,7 @@ class AlchemyMixin(object):
         'hasall': lambda c, x: c.has_all(x),
         'hasany': lambda c, x: c.has_any(x),
         'haskey': lambda c, x: c.has_key(x),  # noqa
+        'overlap': lambda c, x: c.op('&&')(x),
         'istartswith': lambda c, x: c.ilike(x.replace('%', '%%') + '%'),
         'notistartswith': lambda c, x: c.notilike(x.replace('%', '%%') + '%'),
         'iendswith': lambda c, x: c.ilike('%' + x.replace('%', '%%')),
@@ -224,8 +225,8 @@ class AlchemyMixin(object):
                     if relation.direction == MANYTOONE or relation.uselist or key not in relation.mapper.columns:
                         continue
                     if relation.key not in attributes:
-                        attributes[relation.key] = []
-                    attributes[relation.key].append(self.deserialize_column(relation.mapper.columns[key], value))
+                        attributes[relation.key] = {}
+                    attributes[relation.key][key] = self.deserialize_column(relation.mapper.columns[key], value)
 
         return attributes
 
@@ -408,7 +409,10 @@ class AlchemyMixin(object):
                     if len(tokens[index+1:]) > 1:
                         for func_name in tokens[index+1:-1]:
                             expression = Function(func_name, expression)
-                    expression = Function(tokens[-1], expression, value)
+                    if tokens[-1] in self._underscore_operators:
+                        expression = self._underscore_operators[tokens[-1]](expression, value)
+                    else:
+                        expression = Function(tokens[-1], expression, value)
                 else:
                     expression = op(column_name, value)
                 if token == 'isnull':
@@ -582,7 +586,9 @@ class AlchemyMixin(object):
             else:
                 rel_obj = getattr(obj, key)
                 if isinstance(value, dict):
-                    if pk not in value or rel_obj is None:
+                    relationship = mapper.relationships[key]
+                    if (relationship.direction == MANYTOONE or relationship.uselist)\
+                            and (pk not in value or rel_obj is None):
                         setattr(obj, key, AlchemyMixin.update_or_create(db_session, related_mapper, value))
                     else:
                         AlchemyMixin.save_resource(rel_obj, value, db_session)
@@ -838,7 +844,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             except (IntegrityError, ProgrammingError) as err:
                 # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
                 # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
-                if isinstance(err, IntegrityError) or err.orig.args[1] == self.VIOLATION_UNIQUE:
+                if isinstance(err, IntegrityError)\
+                        or (len(err.orig.args) > 1 and err.orig.args[1] == self.VIOLATION_UNIQUE):
                     raise HTTPConflict('Conflict', 'Unique constraint violated')
                 else:
                     raise
@@ -900,12 +907,27 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
 
         self.render_response(result, req, resp)
 
+    def delete(self, req, resp, obj, db_session=None):
+        """
+        Delete an existing record.
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+
+        :param obj: the object to delete
+        """
+        deleted = db_session.delete(obj)
+        if deleted == 0:
+            raise falcon.HTTPConflict('Conflict', 'Resource found but conditions violated')
+
     def on_delete(self, req, resp, *args, **kwargs):
         try:
             with session_scope(self.db_engine) as db_session:
                 obj = self.get_object(req, resp, kwargs, db_session)
 
-                self.delete(req, resp, obj)
+                self.delete(req, resp, obj, db_session)
         except (IntegrityError, ProgrammingError) as err:
             # This should only be caused by foreign key constraint being violated
             if isinstance(err, IntegrityError) or err.orig.args[1] == self.VIOLATION_FOREIGN_KEY:
