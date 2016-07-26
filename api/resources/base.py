@@ -131,7 +131,7 @@ class BaseCollectionResource(BaseResource):
 
         :param max_limit: max limit of elements that suppose to be returned by default
         """
-        super(BaseCollectionResource).__init__(objects_class)
+        super().__init__(objects_class)
         self.max_limit = max_limit
 
     def get_param_totals(self, req):
