@@ -708,25 +708,34 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
     """
     VIOLATION_UNIQUE = '23505'
 
-    def __init__(self, objects_class, db_engine, max_limit=None):
+    def __init__(self, objects_class, db_engine, max_limit=None, eager_limit=None):
         """
         :param objects_class: class represent single element of object lists that suppose to be returned
+
         :param db_engine: SQL Alchemy engine
         :type db_engine: sqlalchemy.engine.Engine
+
+        :param max_limit: max limit of elements that suppose to be returned by default
+        :type max_limit: int
+
+        :param eager_limit: if None or the value of limit param is greater than this, subquery eager loading
+                            will be enabled
+        :type eager_limit: int
         """
         super(CollectionResource, self).__init__(objects_class, max_limit)
         self.db_engine = db_engine
+        self.eager_limit = eager_limit
         if not hasattr(self, '__request_schemas__'):
             self.__request_schemas__ = {}
         self.__request_schemas__['POST'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
 
-    def get_queryset(self, req, resp, db_session=None):
+    def get_queryset(self, req, resp, db_session=None, limit=None):
         query = db_session.query(self.objects_class)
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
-        if relations is None or len(relations):
+        if self.eager_limit is None or (limit is not None and limit > self.eager_limit):
             if relations is None:
                 query = query.options(subqueryload('*'))
-            else:
+            elif len(relations):
                 for relation in relations:
                     query = query.options(subqueryload(relation))
         if self.PARAM_SEARCH in req.params:
@@ -810,7 +819,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         relations = self.clean_relations(req.params.get(self.PARAM_RELATIONS, ''))
 
         with session_scope(self.db_engine) as db_session:
-            query = self.get_queryset(req, resp, db_session)
+            query = self.get_queryset(req, resp, db_session, limit)
             totals = self.get_total_objects(query, totals)
 
             object_list = self.get_object_list(query, limit, offset)
