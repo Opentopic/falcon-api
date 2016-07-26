@@ -844,7 +844,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             except (IntegrityError, ProgrammingError) as err:
                 # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
                 # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
-                if isinstance(err, IntegrityError) or err.orig.args[1] == self.VIOLATION_UNIQUE:
+                if isinstance(err, IntegrityError)\
+                        or (len(err.orig.args) > 1 and err.orig.args[1] == self.VIOLATION_UNIQUE):
                     raise HTTPConflict('Conflict', 'Unique constraint violated')
                 else:
                     raise
@@ -906,12 +907,27 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
 
         self.render_response(result, req, resp)
 
+    def delete(self, req, resp, obj, db_session=None):
+        """
+        Delete an existing record.
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+
+        :param obj: the object to delete
+        """
+        deleted = db_session.delete(obj)
+        if deleted == 0:
+            raise falcon.HTTPConflict('Conflict', 'Resource found but conditions violated')
+
     def on_delete(self, req, resp, *args, **kwargs):
         try:
             with session_scope(self.db_engine) as db_session:
                 obj = self.get_object(req, resp, kwargs, db_session)
 
-                self.delete(req, resp, obj)
+                self.delete(req, resp, obj, db_session)
         except (IntegrityError, ProgrammingError) as err:
             # This should only be caused by foreign key constraint being violated
             if isinstance(err, IntegrityError) or err.orig.args[1] == self.VIOLATION_FOREIGN_KEY:
