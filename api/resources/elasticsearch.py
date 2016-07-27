@@ -36,10 +36,13 @@ class ElasticSearchMixin(object):
     }
 
     def serialize(self, obj):
-        return obj.to_dict()
+        # TODO: unflatten relations etc: search for keys with __, group by prefix, turn into list of objects
+        return obj['_source']
 
     def filter_by(self, query, conditions):
         expressions = self._build_filter_expressions(conditions, None)
+        if expressions is None:
+            return query
         return query.update_from_dict({'query': {'constant_score': {'filter': expressions}}})
 
     def _build_filter_expressions(self, conditions, default_op):
@@ -187,7 +190,28 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         for total in totals:
             if len(total) > 1 or 'count' not in total or total['count'] is not None:
                 raise HTTPBadRequest('Invalid attribute', 'Only _count_ is supported in the _totals_ param')
-        return {'total_count': queryset.execute().hits.total}
+        return {'total_count': queryset.execute()._d_['hits'].total}
+
+    def on_get(self, req, resp):
+        limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
+        offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
+        totals = self.get_param_totals(req)
+
+        queryset = self.get_queryset(req, resp)
+
+        object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
+        # get totals after objects to reuse already executed query
+        totals = self.get_total_objects(queryset, totals)
+
+        # use raw data from object_list and avoid unnecessary serialization
+        serialized = [self.serialize(obj) for obj in object_list.execute()._d_['hits']['hits']]
+        result = {
+            'results': serialized,
+            'total': totals.pop('total_count') if 'total_count' in totals else None,
+            'returned': len(serialized)
+        }
+        result.update(totals)
+        self.render_response(result, req, resp)
 
     def create(self, req, resp, data):
         raise NotImplementedError
