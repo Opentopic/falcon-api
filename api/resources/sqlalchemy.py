@@ -3,7 +3,7 @@ from datetime import datetime, time
 from decimal import Decimal
 
 import falcon
-import json
+import rapidjson as json
 
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
 from sqlalchemy import inspect

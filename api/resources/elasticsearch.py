@@ -1,4 +1,4 @@
-import json
+import rapidjson as json
 import time
 import logging
 
@@ -150,7 +150,8 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
     When fetching a collection (GET), following params are supported:
     * limit, offset - for pagination
     * total_count - to calculate total number of items matching filters, without pagination
-    * all other params are treated as filters, syntax mimics Django filters, see `ElasticSearchMixin._underscore_operators`
+    * all other params are treated as filters, syntax mimics Django filters,
+      see `ElasticSearchMixin._underscore_operators`
     User input can be validated by attaching the `falconjsonio.schema.request_schema()` decorator.
     """
 
