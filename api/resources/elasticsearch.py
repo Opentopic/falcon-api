@@ -1,4 +1,6 @@
 import json
+import time
+import logging
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 from elasticsearch import NotFoundError
@@ -193,18 +195,24 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         return {'total_count': queryset.execute()._d_['hits'].total}
 
     def on_get(self, req, resp):
+        start_seconds = time.perf_counter()
         limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
         totals = self.get_param_totals(req)
 
         queryset = self.get_queryset(req, resp)
+        qs_s = time.perf_counter() - start_seconds
 
         object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
+        ol_s = time.perf_counter() - start_seconds
         # get totals after objects to reuse already executed query
         totals = self.get_total_objects(queryset, totals)
+        t_s = time.perf_counter() - start_seconds
 
         # use raw data from object_list and avoid unnecessary serialization
-        serialized = [self.serialize(obj) for obj in object_list.execute()._d_['hits']['hits']]
+        data = object_list.execute()._d_['hits']['hits']
+        d_s = time.perf_counter() - start_seconds
+        serialized = [self.serialize(obj) for obj in data]
         result = {
             'results': serialized,
             'total': totals.pop('total_count') if 'total_count' in totals else None,
@@ -212,6 +220,17 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         }
         result.update(totals)
         self.render_response(result, req, resp)
+        r_s = time.perf_counter() - start_seconds
+        logging.getLogger().debug(
+            'ES CollectionResource: qs {}s, ol {}s, t {}s, d {}s, r {}s'.format(qs_s, ol_s, t_s, d_s, r_s),
+            extra={
+                'queryset_seconds': qs_s,
+                'object_list_seconds': ol_s,
+                'totals_seconds': t_s,
+                'data_seconds': d_s,
+                'result_seconds': r_s,
+            }
+        )
 
     def create(self, req, resp, data):
         raise NotImplementedError
