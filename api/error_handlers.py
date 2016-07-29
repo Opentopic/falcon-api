@@ -19,8 +19,10 @@ class JsonError(Exception):
         :type params: dict
         :raises falcon.HTTPError
         """
+        logger = logging.getLogger()
         if not isinstance(ex, falcon.HTTPError):
-            logger = logging.getLogger()
-            logger.error('Exception occurred ({}): {}'.format(type(ex), ex), exc_info=ex)
+            logger.error('Non-HTTP exception occurred ({}): {}'.format(type(ex), ex), exc_info=ex)
             ex = falcon.HTTPError(falcon.HTTP_500, str(type(ex)), str(ex))
+        else:
+            logger.warning('HTTP exception occurred ({}): {}'.format(type(ex), ex), exc_info=ex)
         raise ex

@@ -97,15 +97,19 @@ class ElasticSearchMixin(object):
 
     def _parse_tokens(self, obj_class, tokens, value, default_expression=None):
         column_name = None
+        accumulated = ''
         for index, token in enumerate(tokens):
-            if token == CollectionResource.PARAM_TEXT_QUERY:
-                query_method = getattr(obj_class, 'get_term_query', None)
-                if not callable(query_method):
-                    raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
-                                                              'can\'t provide a query'.format('__'.join(tokens)))
-                return query_method(self=obj_class, column_name=column_name, value=value,
-                                    default_op='should' if tokens[-1] == 'or' else 'must')
-            if column_name is not None and token in self._underscore_operators:
+            if column_name is not None:
+                if token == CollectionResource.PARAM_TEXT_QUERY:
+                    query_method = getattr(obj_class, 'get_term_query', None)
+                    if not callable(query_method):
+                        raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
+                                                                  'can\'t provide a query'.format('__'.join(tokens)))
+                    return query_method(self=obj_class, column_name=column_name, value=value,
+                                        default_op='should' if tokens[-1] == 'or' else 'must')
+                if token not in self._underscore_operators:
+                    raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
+                                                              'operator'.format('__'.join(tokens), token))
                 op = self._underscore_operators[token]
                 if token in ['range', 'in']:
                     if not isinstance(value, list):
@@ -127,8 +131,8 @@ class ElasticSearchMixin(object):
                 return expression
             if token not in obj_class._doc_type.mapping:
                 # if token is not an op it has to be a valid column
-                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected '
-                                                          'to be a known column name'.format('__'.join(tokens), token))
+                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
+                                                          'column name'.format('__'.join(tokens), token))
             column_name = token
         if column_name is not None and default_expression is not None:
             # if last token was a relation it's just going to be ignored
