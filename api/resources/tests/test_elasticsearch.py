@@ -97,7 +97,7 @@ def query_ordered(request):
 
 @pytest.fixture(params=[
     ("""[{"sum": ["other_models__id"]}]""",
-     """{}"""),
+     """{"aggs": {"sum": {"sum": {"field": "other_models.id"}}}, "query": {"match_all": {}}}"""),
 ])
 def query_totals(request):
     return request.param
@@ -153,20 +153,3 @@ def test_totals(connection, query_totals):
     c = CollectionResource(objects_class=Model, connection=connection)
     query_obj = c._build_total_expressions(Search(using=connection).doc_type(Model), conditions)
     assert query_obj.to_dict() == expected
-
-
-def test_serialize(model):
-    es = ElasticSearchMixin()
-    expected = {
-        'id': 1,
-        'name': 'model',
-        'other_models': {
-            2: {
-                'name': 'other_model1',
-            },
-            3: {
-                'name': 'other_model2',
-            },
-        },
-    }
-    assert es.serialize(model) == expected

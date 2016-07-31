@@ -96,7 +96,7 @@ class ElasticSearchMixin(object):
             result = expressions[0] if default_op != 'must_not' else {'bool': {'must_not': expressions[0]}}
         return result
 
-    def _parse_tokens(self, obj_class, tokens, value, default_expression=None):
+    def _parse_tokens(self, obj_class, tokens, value, default_expression=None, wrap_nested=True):
         column_name = None
         nested_name = None
         accumulated = ''
@@ -131,7 +131,7 @@ class ElasticSearchMixin(object):
                     expression = {op: {column_name: value}}
                 if op.startswith('not'):
                     expression = {'bool': {'must_not': expression}}
-                if nested_name is not None:
+                if nested_name is not None and wrap_nested:
                     return {'nested': {'path': nested_name, 'query': expression}}
                 return expression
             if accumulated and accumulated in mapping\
@@ -153,7 +153,7 @@ class ElasticSearchMixin(object):
         if column_name is not None and default_expression is not None:
             # if last token was a relation it's just going to be ignored
             expression = default_expression(column_name, value)
-            if nested_name is not None:
+            if nested_name is not None and wrap_nested:
                 return {'nested': {'path': nested_name, 'query': expression}}
             return expression
         return None
@@ -214,10 +214,30 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
     def get_total_objects(self, queryset, totals):
         if not totals:
             return {}
+        queryset = self._build_total_expressions(queryset, totals)
+        result = queryset.execute()._d_.get('aggregations', {})
+        result['count'] = {'value': queryset.execute()._d_['hits'].total}
+        return {'total_' + key: value['value'] for key, value in result.items()}
+
+    def _build_total_expressions(self, queryset, totals):
+        aggregates = {}
         for total in totals:
-            if len(total) > 1 or 'count' not in total or total['count'] is not None:
-                raise HTTPBadRequest('Invalid attribute', 'Only _count_ is supported in the _totals_ param')
-        return {'total_count': queryset.execute()._d_['hits'].total}
+            for aggregate, columns in total.items():
+                if aggregate == 'count':
+                    continue
+                if not columns:
+                    aggregates[aggregate] = {aggregate: {'field': 'id'}}
+                    continue
+                if not isinstance(columns, list):
+                    columns = [columns]
+                for column in columns:
+                    expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n,
+                                                    wrap_nested=False)
+                    if expression is not None:
+                        aggregates[aggregate] = {aggregate: {'field': expression}}
+        if aggregates:
+            return queryset.update_from_dict({'aggs': aggregates})
+        return queryset
 
     def on_get(self, req, resp):
         start_seconds = time.perf_counter()
@@ -230,7 +250,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
 
         object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
         ol_s = time.perf_counter() - start_seconds
-        # get totals after objects to reuse already executed query
+        # get totals after objects to reuse main query
         totals = self.get_total_objects(queryset, totals)
         t_s = time.perf_counter() - start_seconds
 

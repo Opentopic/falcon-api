@@ -780,16 +780,16 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         aggregates = []
         for total in totals:
             for aggregate, columns in total.items():
-                if columns:
-                    if not isinstance(columns, list):
-                        columns = [columns]
-                    for column in columns:
-                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, relationships,
-                                                        lambda c, n, v: n)
-                        if expression is not None:
-                            aggregates.append(Function(aggregate, expression).label(aggregate))
-                else:
+                if not columns:
                     aggregates.append(Function(aggregate, *primary_keys).label(aggregate))
+                    continue
+                if not isinstance(columns, list):
+                    columns = [columns]
+                for column in columns:
+                    expression = self._parse_tokens(self.objects_class, column.split('__'), None, relationships,
+                                                    lambda c, n, v: n)
+                    if expression is not None:
+                        aggregates.append(Function(aggregate, expression).label(aggregate))
         agg_query = self._apply_joins(queryset, relationships, distinct=False)
         agg_query = agg_query.statement.with_only_columns(aggregates).order_by(None)
         return agg_query
