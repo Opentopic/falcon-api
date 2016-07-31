@@ -4,7 +4,8 @@ import logging
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 from elasticsearch import NotFoundError
-from elasticsearch_dsl import Search
+from elasticsearch_dsl import Mapping, Field
+from elasticsearch_dsl import Search, Nested
 from falcon import HTTPBadRequest, HTTPNotFound
 
 
@@ -97,16 +98,18 @@ class ElasticSearchMixin(object):
 
     def _parse_tokens(self, obj_class, tokens, value, default_expression=None):
         column_name = None
+        nested_name = None
         accumulated = ''
+        mapping = obj_class._doc_type.mapping
         for index, token in enumerate(tokens):
+            if token == CollectionResource.PARAM_TEXT_QUERY:
+                query_method = getattr(obj_class, 'get_term_query', None)
+                if not callable(query_method):
+                    raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
+                                                              'can\'t provide a query'.format('__'.join(tokens)))
+                return query_method(self=obj_class, column_name=column_name, value=value,
+                                    default_op='should' if tokens[-1] == 'or' else 'must')
             if column_name is not None:
-                if token == CollectionResource.PARAM_TEXT_QUERY:
-                    query_method = getattr(obj_class, 'get_term_query', None)
-                    if not callable(query_method):
-                        raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
-                                                                  'can\'t provide a query'.format('__'.join(tokens)))
-                    return query_method(self=obj_class, column_name=column_name, value=value,
-                                        default_op='should' if tokens[-1] == 'or' else 'must')
                 if token not in self._underscore_operators:
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
                                                               'operator'.format('__'.join(tokens), token))
@@ -128,18 +131,35 @@ class ElasticSearchMixin(object):
                     expression = {op: {column_name: value}}
                 if op.startswith('not'):
                     expression = {'bool': {'must_not': expression}}
+                if nested_name is not None:
+                    return {'nested': {'path': nested_name, 'query': expression}}
                 return expression
-            if token not in obj_class._doc_type.mapping:
-                # if token is not an op it has to be a valid column
-                raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
-                                                          'column name'.format('__'.join(tokens), token))
-            column_name = token
+            if accumulated and accumulated in mapping\
+                    and isinstance(mapping[accumulated], Nested):
+                nested_name = accumulated
+                obj_class = mapping[accumulated]._doc_class
+                mapping = Mapping(obj_class.__class__.__name__)
+                for name, attr in obj_class.__dict__.items():
+                    if isinstance(attr, Field):
+                        mapping.field(name, attr)
+                accumulated = ''
+            accumulated += ('__' if accumulated else '') + token
+            if accumulated in mapping\
+                    and not isinstance(mapping[accumulated], Nested):
+                column_name = ((nested_name + '.') if nested_name else '') + accumulated
+        if column_name is None:
+            raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, it is expected to be a known '
+                                                      'column name'.format('__'.join(tokens)))
         if column_name is not None and default_expression is not None:
             # if last token was a relation it's just going to be ignored
-            return default_expression(column_name, value)
+            expression = default_expression(column_name, value)
+            if nested_name is not None:
+                return {'nested': {'path': nested_name, 'query': expression}}
+            return expression
         return None
 
-    def get_match_query(self, value, default_op):
+    @classmethod
+    def get_match_query(cls, value, default_op):
         if isinstance(value, list):
             tq = {'query': ' '.join(value), 'operator': 'or' if default_op == 'should' else 'and'}
         else:
