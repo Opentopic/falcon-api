@@ -73,7 +73,7 @@ def connection():
                            {"bool": {"should": [{"term": {"name": "value3"}},
                                                 {"term": {"id": 0}}]}}]}}"""),
     ("""{"not": {"other_models__name__isnull": "true"}}""",
-     """{"bool": {"must_not": [{"nested": {"path": "other_models", "query": {"missing": {"field": "other_models.name"}}}}]}}"""),
+     """{"bool": {"must_not": [{"nested": {"path": "other_models", "query": {"missing": {"field": "other_models.name"}}}}]}}"""),  # flake8: noqa
     ("""{"and": {"q": "value2",
                  "q__or": ["value", "value2"],
                  "q__and": ["one", "two", "three"]}}""",
@@ -136,7 +136,6 @@ def test_order_by(connection, query_ordered):
         conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
     if isinstance(expected, str):
         expected = json.loads(expected, object_pairs_hook=OrderedDict)
-    c = CollectionResource(objects_class=Model, connection=connection)
     query_obj = Search(using=connection).doc_type(Model).sort(*conditions)
     assert query_obj.to_dict() == expected
 
