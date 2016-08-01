@@ -29,6 +29,10 @@ class ElasticSearchMixin(object):
         'notstartswith': 'prefix',
         'endswith':     'wildcard',
         'notendswith':  'wildcard',
+        'hasall':       'term',
+        'hasany':       'terms',
+        'haskey':       'term',
+        'overlap':      'terms',
         'isnull': 'missing',
         'isnotnull': 'exists',
     }
@@ -66,27 +70,10 @@ class ElasticSearchMixin(object):
 
         for arg, value in conditions.items():
             if arg in self._logical_operators:
-                op = self._logical_operators[arg]
-                if isinstance(value, list):
-                    parts = []
-                    for subconditions in value:
-                        if not isinstance(subconditions, dict):
-                            raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                        subexpressions = self._build_filter_expressions(subconditions, 'must')
-                        if subexpressions is not None:
-                            parts.append(subexpressions)
-                    if len(parts) > 1:
-                        expressions.append({'bool': {op: parts}})
-                    elif len(parts) == 1:
-                        expressions.append(parts[0] if op != 'must_not' else {'bool': {'must_not': parts[0]}})
-                    continue
-                if not isinstance(value, dict):
-                    raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                subexpressions = self._build_filter_expressions(value, op)
-                if subexpressions is not None:
-                    expressions.append(subexpressions)
-                continue
-            expression = self._parse_tokens(self.objects_class, arg.split('__'), value, lambda n, v: {'term': {n: v}})
+                expression = self._parse_logical_op(arg, value, self._logical_operators[arg])
+            else:
+                expression = self._parse_tokens(self.objects_class, arg.split('__'), value,
+                                                lambda n, v: {'term': {n: v}})
             if expression is not None:
                 expressions.append(expression)
         result = None
@@ -96,8 +83,28 @@ class ElasticSearchMixin(object):
             result = expressions[0] if default_op != 'must_not' else {'bool': {'must_not': expressions[0]}}
         return result
 
+    def _parse_logical_op(self, arg, value, op):
+        if isinstance(value, dict):
+            return self._build_filter_expressions(value, op)
+        if not isinstance(value, list):
+            raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+        parts = []
+        for subconditions in value:
+            if not isinstance(subconditions, dict):
+                raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+            subexpressions = self._build_filter_expressions(subconditions, 'must')
+            if subexpressions is not None:
+                parts.append(subexpressions)
+        result = None
+        if len(parts) > 1:
+            result = {'bool': {op: parts}}
+        elif len(parts) == 1:
+            result = parts[0] if op != 'must_not' else {'bool': {'must_not': parts[0]}}
+        return result
+
     def _parse_tokens(self, obj_class, tokens, value, default_expression=None, wrap_nested=True):
         column_name = None
+        field = None
         nested_name = None
         accumulated = ''
         mapping = obj_class._doc_type.mapping
@@ -114,7 +121,8 @@ class ElasticSearchMixin(object):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
                                                               'operator'.format('__'.join(tokens), token))
                 op = self._underscore_operators[token]
-                if token in ['range', 'in']:
+                if token in ['range', 'notrange', 'in', 'notin', 'hasany', 'overlap']\
+                        or (token in ['contains', 'notcontains'] and field._multi):
                     if not isinstance(value, list):
                         value = [value]
                 if op in ['missing', 'exists']:
@@ -125,8 +133,13 @@ class ElasticSearchMixin(object):
                     else:
                         expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}}}
                 elif op == 'wildcard':
-                    expression = {op: {column_name: '*' + value +
-                                                    ('*' if token == 'contains' or token == 'notcontains' else '')}}
+                    if token == 'contains' or token == 'notcontains':
+                        if field._multi:
+                            expression = {'terms': {column_name: value}}
+                        else:
+                            expression = {op: {column_name: '*' + value + '*'}}
+                    else:
+                        expression = {op: {column_name: '*' + value}}
                 else:
                     expression = {op: {column_name: value}}
                 if op.startswith('not'):
@@ -147,6 +160,7 @@ class ElasticSearchMixin(object):
             if accumulated in mapping\
                     and not isinstance(mapping[accumulated], Nested):
                 column_name = ((nested_name + '.') if nested_name else '') + accumulated
+                field = mapping[accumulated]
         if column_name is None:
             raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, it is expected to be a known '
                                                       'column name'.format('__'.join(tokens)))
@@ -216,7 +230,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
             return {}
         queryset = self._build_total_expressions(queryset, totals)
         result = queryset.execute()._d_.get('aggregations', {})
-        result['count'] = {'value': queryset.execute()._d_['hits'].total}
+        result['count'] = {'value': queryset.execute()._d_['hits']['total']}
         return {'total_' + key: value['value'] for key, value in result.items()}
 
     def _build_total_expressions(self, queryset, totals):

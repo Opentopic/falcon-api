@@ -355,30 +355,47 @@ class AlchemyMixin(object):
 
         for arg, value in conditions.items():
             if arg in self._logical_operators:
-                op = self._logical_operators[arg]
-                if isinstance(value, list):
-                    parts = []
-                    for subconditions in value:
-                        if not isinstance(subconditions, dict):
-                            raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                        subexpressions = self._build_filter_expressions(subconditions, and_, relationships)
-                        if subexpressions is not None:
-                            parts.append(subexpressions)
-                    if len(parts) > 1:
-                        expressions.append(op(*parts) if op != not_ else not_(and_(*parts)))
-                    elif len(parts) == 1:
-                        expressions.append(parts[0] if op != not_ else not_(parts[0]))
-                    continue
-                if not isinstance(value, dict):
-                    raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                subexpressions = self._build_filter_expressions(value, op, relationships)
-                if subexpressions is not None:
-                    expressions.append(subexpressions)
-                continue
-            expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
-                                            lambda c, n, v: operators.eq(n, self.deserialize_column(c, v)))
+                expression = self._parse_logical_op(arg, value, self._logical_operators[arg], relationships)
+            else:
+                expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
+                                                lambda c, n, v: operators.eq(n, self.deserialize_column(c, v)))
             if expression is not None:
                 expressions.append(expression)
+        result = None
+        if len(expressions) > 1:
+            result = default_op(*expressions) if default_op != not_ else not_(and_(*expressions))
+        elif len(expressions) == 1:
+            result = expressions[0] if default_op != not_ else not_(expressions[0])
+        return result
+
+    def _parse_logical_op(self, arg, value, default_op, relationships):
+        """
+        :param arg: condition name
+        :type arg: str
+
+        :param value: condition value
+        :type value: dict | list
+
+        :param default_op: a default operator to join all filter expressions
+        :type default_op: function
+
+        :param relationships:  a dict with all joins to apply, describes current state in recurrent calls
+        :type relationships: dict
+
+        :return: expressions list
+        :rtype: list
+        """
+        if isinstance(value, dict):
+            return self._build_filter_expressions(value, default_op, relationships)
+        if not isinstance(value, list):
+            raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+        expressions = []
+        for subconditions in value:
+            if not isinstance(subconditions, dict):
+                raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+            subexpressions = self._build_filter_expressions(subconditions, and_, relationships)
+            if subexpressions is not None:
+                expressions.append(subexpressions)
         result = None
         if len(expressions) > 1:
             result = default_op(*expressions) if default_op != not_ else not_(and_(*expressions))
