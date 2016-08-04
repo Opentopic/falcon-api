@@ -3,7 +3,7 @@ from datetime import datetime, time
 from decimal import Decimal
 
 import falcon
-import json
+import rapidjson as json
 
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
 from sqlalchemy import inspect
@@ -17,24 +17,6 @@ from sqlalchemy.sql.expression import and_, or_, not_, desc
 from sqlalchemy.sql.functions import Function
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
-
-
-@contextmanager
-def session_scope(db_engine):
-    """
-    Provide a scoped db session for a series of operarions.
-    The session is created immediately before the scope begins, and is closed
-    on scope exit.
-    """
-    db_session = sessionmaker(bind=db_engine)()
-    try:
-        yield db_session
-        db_session.commit()
-    except:
-        db_session.rollback()
-        raise
-    finally:
-        db_session.close()
 
 
 class AlchemyMixin(object):
@@ -87,7 +69,33 @@ class AlchemyMixin(object):
         'not': not_,
     }
 
-    def serialize(self, obj, skip_primary_key=False, skip_foreign_keys=False, relations_level=1, relations_ignore=None,
+    @classmethod
+    @contextmanager
+    def session_scope(cls, db_engine=None, session_class=None):
+        """
+        Provide a scoped db session for a series of operarions.
+        The session is created immediately before the scope begins, and is closed
+        on scope exit.
+        :param db_engine: SQLAlchemy Engine or other Connectable
+        :type db_engine: sqlalchemy.engine.Connectable
+
+        :param session_class: SQLAlchemy Session
+        :type session_class: sqlalchemy.orm.Session
+        """
+        if session_class is None:
+            session_class = sessionmaker(bind=db_engine)
+        db_session = session_class()
+        try:
+            yield db_session
+            db_session.commit()
+        except:
+            db_session.rollback()
+            raise
+        finally:
+            db_session.close()
+
+    @classmethod
+    def serialize(cls, obj, skip_primary_key=False, skip_foreign_keys=False, relations_level=1, relations_ignore=None,
                   relations_include=None):
         """
         Converts the object to a serializable dictionary.
@@ -112,16 +120,15 @@ class AlchemyMixin(object):
         :rtype: dict
         """
         data = {}
-        data = self.serialize_columns(obj, data, skip_primary_key, skip_foreign_keys)
+        data = cls.serialize_columns(obj, data, skip_primary_key, skip_foreign_keys)
         if relations_level > 0:
             if relations_ignore is None:
-                relations_ignore = list(getattr(self, 'serialize_ignore', []))
-            if relations_include is None and hasattr(self, 'serialize_include'):
-                relations_include = list(getattr(self, 'serialize_include'))
-            data = self.serialize_relations(obj, data, relations_level, relations_ignore, relations_include)
+                relations_ignore = []
+            data = cls.serialize_relations(obj, data, relations_level, relations_ignore, relations_include)
         return data
 
-    def serialize_columns(self, obj, data, skip_primary_key=False, skip_foreign_keys=False):
+    @classmethod
+    def serialize_columns(cls, obj, data, skip_primary_key=False, skip_foreign_keys=False):
         columns = inspect(obj).mapper.columns
         for key, column in columns.items():
             if skip_primary_key and column.primary_key:
@@ -130,11 +137,12 @@ class AlchemyMixin(object):
                 continue
             if isinstance(column.type, TSVECTOR):
                 continue
-            data[key] = self.serialize_column(column, getattr(obj, key))
+            data[key] = cls.serialize_column(column, getattr(obj, key))
 
         return data
 
-    def serialize_column(self, column, value):
+    @classmethod
+    def serialize_column(cls, column, value):
         if isinstance(value, datetime):
             return value.strftime('%Y-%m-%dT%H:%M:%SZ')
         elif isinstance(value, time):
@@ -143,7 +151,8 @@ class AlchemyMixin(object):
             return float(value)
         return value
 
-    def serialize_relations(self, obj, data, relations_level=1, relations_ignore=None, relations_include=None):
+    @classmethod
+    def serialize_relations(cls, obj, data, relations_level=1, relations_ignore=None, relations_include=None):
         mapper = inspect(obj).mapper
         for relation in mapper.relationships:
             if relation.key in relations_ignore\
@@ -156,15 +165,15 @@ class AlchemyMixin(object):
             if relation.back_populates:
                 relations_ignore.append(relation.back_populates)
             if relation.direction == MANYTOONE:
-                data[relation.key] = self.serialize(rel_obj, relations_level=relations_level - 1,
-                                                    relations_ignore=relations_ignore)
+                data[relation.key] = cls.serialize(rel_obj, relations_level=relations_level - 1,
+                                                   relations_ignore=relations_ignore)
             elif not relation.uselist:
-                data.update(self.serialize(rel_obj, skip_primary_key=True, relations_level=relations_level - 1,
-                                           relations_ignore=relations_ignore))
+                data.update(cls.serialize(rel_obj, skip_primary_key=True, relations_level=relations_level - 1,
+                                          relations_ignore=relations_ignore))
             else:
                 data[relation.key] = {
-                    rel.id: self.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1,
-                                           relations_ignore=relations_ignore)
+                    rel.id: cls.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1,
+                                          relations_ignore=relations_ignore)
                     for rel in rel_obj if hasattr(rel, 'id')
                 }
         return data
@@ -346,30 +355,47 @@ class AlchemyMixin(object):
 
         for arg, value in conditions.items():
             if arg in self._logical_operators:
-                op = self._logical_operators[arg]
-                if isinstance(value, list):
-                    parts = []
-                    for subconditions in value:
-                        if not isinstance(subconditions, dict):
-                            raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                        subexpressions = self._build_filter_expressions(subconditions, and_, relationships)
-                        if subexpressions is not None:
-                            parts.append(subexpressions)
-                    if len(parts) > 1:
-                        expressions.append(op(*parts) if op != not_ else not_(and_(*parts)))
-                    elif len(parts) == 1:
-                        expressions.append(parts[0] if op != not_ else not_(parts[0]))
-                    continue
-                if not isinstance(value, dict):
-                    raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-                subexpressions = self._build_filter_expressions(value, op, relationships)
-                if subexpressions is not None:
-                    expressions.append(subexpressions)
-                continue
-            expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
-                                            lambda c, n, v: operators.eq(n, self.deserialize_column(c, v)))
+                expression = self._parse_logical_op(arg, value, self._logical_operators[arg], relationships)
+            else:
+                expression = self._parse_tokens(self.objects_class, arg.split('__'), value, relationships,
+                                                lambda c, n, v: operators.eq(n, self.deserialize_column(c, v)))
             if expression is not None:
                 expressions.append(expression)
+        result = None
+        if len(expressions) > 1:
+            result = default_op(*expressions) if default_op != not_ else not_(and_(*expressions))
+        elif len(expressions) == 1:
+            result = expressions[0] if default_op != not_ else not_(expressions[0])
+        return result
+
+    def _parse_logical_op(self, arg, value, default_op, relationships):
+        """
+        :param arg: condition name
+        :type arg: str
+
+        :param value: condition value
+        :type value: dict | list
+
+        :param default_op: a default operator to join all filter expressions
+        :type default_op: function
+
+        :param relationships:  a dict with all joins to apply, describes current state in recurrent calls
+        :type relationships: dict
+
+        :return: expressions list
+        :rtype: list
+        """
+        if isinstance(value, dict):
+            return self._build_filter_expressions(value, default_op, relationships)
+        if not isinstance(value, list):
+            raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+        expressions = []
+        for subconditions in value:
+            if not isinstance(subconditions, dict):
+                raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
+            subexpressions = self._build_filter_expressions(subconditions, and_, relationships)
+            if subexpressions is not None:
+                expressions.append(subexpressions)
         result = None
         if len(expressions) > 1:
             result = default_op(*expressions) if default_op != not_ else not_(and_(*expressions))
@@ -771,16 +797,16 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         aggregates = []
         for total in totals:
             for aggregate, columns in total.items():
-                if columns:
-                    if not isinstance(columns, list):
-                        columns = [columns]
-                    for column in columns:
-                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, relationships,
-                                                        lambda c, n, v: n)
-                        if expression is not None:
-                            aggregates.append(Function(aggregate, expression).label(aggregate))
-                else:
+                if not columns:
                     aggregates.append(Function(aggregate, *primary_keys).label(aggregate))
+                    continue
+                if not isinstance(columns, list):
+                    columns = [columns]
+                for column in columns:
+                    expression = self._parse_tokens(self.objects_class, column.split('__'), None, relationships,
+                                                    lambda c, n, v: n)
+                    if expression is not None:
+                        aggregates.append(Function(aggregate, expression).label(aggregate))
         agg_query = self._apply_joins(queryset, relationships, distinct=False)
         agg_query = agg_query.statement.with_only_columns(aggregates).order_by(None)
         return agg_query
@@ -809,13 +835,15 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         # retrieve that param without removing it so self.get_queryset() so it can also use it
         relations = self.clean_relations(req.params.get(self.PARAM_RELATIONS, ''))
 
-        with session_scope(self.db_engine) as db_session:
+        with self.session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session)
             totals = self.get_total_objects(query, totals)
 
             object_list = self.get_object_list(query, limit, offset)
 
-            serialized = [self.serialize(obj, relations_include=relations) for obj in object_list]
+            serialized = [self.serialize(obj, relations_include=relations,
+                                         relations_ignore=list(getattr(self, 'serialize_ignore', [])))
+                          for obj in object_list]
             result = {
                 'results': serialized,
                 'total': totals['total_count'] if 'total_count' in totals else None,
@@ -829,7 +857,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         resource = self.save_resource(self.objects_class(), data, db_session)
         db_session.commit()
-        return self.serialize(resource, relations_include=relations)
+        return self.serialize(resource, relations_include=relations,
+                              relations_ignore=list(getattr(self, 'serialize_ignore', [])))
 
     def on_post(self, req, resp, *args, **kwargs):
         data = self.deserialize(req.context['doc'] if 'doc' in req.context else None)
@@ -839,7 +868,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             status_code = falcon.HTTP_BAD_REQUEST
         else:
             try:
-                with session_scope(self.db_engine) as db_session:
+                with self.session_scope(self.db_engine) as db_session:
                     result = self.create(req, resp, data, db_session=db_session)
             except (IntegrityError, ProgrammingError) as err:
                 # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
@@ -898,11 +927,12 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
 
     def on_get(self, req, resp, *args, **kwargs):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
-        with session_scope(self.db_engine) as db_session:
+        with self.session_scope(self.db_engine) as db_session:
             obj = self.get_object(req, resp, kwargs, db_session)
 
             result = {
-                'results': self.serialize(obj, relations_include=relations),
+                'results': self.serialize(obj, relations_include=relations,
+                                          relations_ignore=list(getattr(self, 'serialize_ignore', []))),
             }
 
         self.render_response(result, req, resp)
@@ -924,7 +954,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
 
     def on_delete(self, req, resp, *args, **kwargs):
         try:
-            with session_scope(self.db_engine) as db_session:
+            with self.session_scope(self.db_engine) as db_session:
                 obj = self.get_object(req, resp, kwargs, db_session)
 
                 self.delete(req, resp, obj, db_session)
@@ -941,12 +971,13 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         resource = self.save_resource(obj, data, db_session)
         db_session.commit()
-        return self.serialize(resource, relations_include=relations)
+        return self.serialize(resource, relations_include=relations,
+                              relations_ignore=list(getattr(self, 'serialize_ignore', [])))
 
     def on_put(self, req, resp, *args, **kwargs):
         status_code = falcon.HTTP_OK
         try:
-            with session_scope(self.db_engine) as db_session:
+            with self.session_scope(self.db_engine) as db_session:
                 obj = self.get_object(req, resp, kwargs, db_session)
 
                 data = self.deserialize(req.context['doc'] if 'doc' in req.context else None)
