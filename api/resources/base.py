@@ -1,4 +1,4 @@
-import json
+import rapidjson as json
 
 import falcon
 
@@ -233,10 +233,11 @@ class BaseCollectionResource(BaseResource):
 
         object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
 
+        serialized = [self.serialize(obj) for obj in object_list]
         result = {
-            'results': [self.serialize(obj) for obj in object_list],
+            'results': serialized,
             'total': totals.pop('total_count') if 'total_count' in totals else None,
-            'returned': len(object_list)
+            'returned': len(serialized)
         }
         result.update(totals)
         self.render_response(result, req, resp)
