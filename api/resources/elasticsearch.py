@@ -203,8 +203,9 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         self.connection = connection
 
     def get_queryset(self, req, resp):
-        query = Search(using=self.connection)
-        query = query.doc_type(self.objects_class)
+        query = Search(using=self.connection,
+                       index=self.objects_class._doc_type.index,
+                       doc_type=self.objects_class)
 
         if self.PARAM_SEARCH in req.params:
             try:

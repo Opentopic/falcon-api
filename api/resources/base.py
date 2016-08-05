@@ -130,6 +130,7 @@ class BaseCollectionResource(BaseResource):
         :param objects_class: class represent single element of object lists that suppose to be returned
 
         :param max_limit: max limit of elements that suppose to be returned by default
+        :type max_limit: int
         """
         super().__init__(objects_class)
         self.max_limit = max_limit
