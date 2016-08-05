@@ -1,4 +1,4 @@
-import json
+import rapidjson as json
 from falcon import HTTPBadRequest, HTTPNotFound
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
