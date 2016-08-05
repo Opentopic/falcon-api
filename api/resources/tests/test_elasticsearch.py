@@ -136,7 +136,7 @@ def test_order_by(connection, query_ordered):
         conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
     if isinstance(expected, str):
         expected = json.loads(expected, object_pairs_hook=OrderedDict)
-    query_obj = Search(using=connection).doc_type(Model).sort(*conditions)
+    query_obj = Search(using=connection, doc_type=Model).sort(*conditions)
     assert query_obj.to_dict() == expected
 
 
