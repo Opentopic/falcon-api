@@ -180,6 +180,16 @@ class ElasticSearchMixin(object):
             tq = value
         return tq
 
+    def _build_order_expressions(self, criteria):
+        """
+        :param criteria: criteria dictionary
+        :type criteria: dict
+
+        :return: expressions list
+        :rtype: list
+        """
+        return criteria
+
 
 class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
     """
@@ -223,7 +233,9 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                     pass
             if not isinstance(order, list) and not isinstance(order, dict):
                 order = [order]
-            query = query.sort(*order)
+            order_expressions = self._build_order_expressions(order)
+            if order_expressions:
+                query = query.sort(*order_expressions)
         return self.filter_by(query, req.params)
 
     def get_total_objects(self, queryset, totals):
