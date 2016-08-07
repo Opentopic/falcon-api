@@ -73,7 +73,7 @@ class ElasticSearchMixin(object):
                 expression = self._parse_logical_op(arg, value, self._logical_operators[arg])
             else:
                 expression = self._parse_tokens(self.objects_class, arg.split('__'), value,
-                                                lambda n, v: {'term': {n: v}})
+                                                lambda n, v: {'term': {n: v, '_expand__to_dot': False}})
             if expression is not None:
                 expressions.append(expression)
         result = None
@@ -126,22 +126,22 @@ class ElasticSearchMixin(object):
                     if not isinstance(value, list):
                         value = [value]
                 if op in ['missing', 'exists']:
-                    expression = {op: {'field': column_name}}
+                    expression = {op: {'field': column_name, '_expand__to_dot': False}}
                 elif op == 'range':
                     if token != 'range':
-                        expression = {op: {column_name: {token: value}}}
+                        expression = {op: {column_name: {token: value}, '_expand__to_dot': False}}
                     else:
-                        expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}}}
+                        expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}, '_expand__to_dot': False}}
                 elif op == 'wildcard':
                     if token == 'contains' or token == 'notcontains':
                         if field._multi:
-                            expression = {'terms': {column_name: value}}
+                            expression = {'terms': {column_name: value, '_expand__to_dot': False}}
                         else:
-                            expression = {op: {column_name: '*' + value + '*'}}
+                            expression = {op: {column_name: '*' + value + '*', '_expand__to_dot': False}}
                     else:
-                        expression = {op: {column_name: '*' + value}}
+                        expression = {op: {column_name: '*' + value, '_expand__to_dot': False}}
                 else:
-                    expression = {op: {column_name: value}}
+                    expression = {op: {column_name: value, '_expand__to_dot': False}}
                 if op.startswith('not'):
                     expression = {'bool': {'must_not': expression}}
                 if nested_name is not None and wrap_nested:
