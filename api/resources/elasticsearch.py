@@ -175,7 +175,8 @@ class ElasticSearchMixin(object):
     @classmethod
     def get_match_query(cls, value, default_op):
         if isinstance(value, list):
-            tq = {'query': ' '.join(value), 'operator': 'or' if default_op == 'should' else 'and'}
+            tq = {'query': ' '.join(['"' + v.replace('\\', '\\\\').replace('"', '\\"') + '"' for v in value]),
+                  'operator': 'or' if default_op == 'should' else 'and'}
         else:
             tq = value
         return tq
