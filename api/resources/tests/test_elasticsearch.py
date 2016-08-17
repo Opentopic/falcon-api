@@ -79,9 +79,9 @@ def connection():
                  "q__and": ["one", "two", "three"]}}""",
      """{"bool": {"must": [{"match": {"name": "value2"}},
                            {"match": {"name": {"operator": "or",
-                                               "query": "value value2"}}},
+                                               "query": "\\"value\\" \\"value2\\""}}},
                            {"match": {"name": {"operator": "and",
-                                               "query": "one two three"}}}]}}"""),
+                                               "query": "\\"one\\" \\"two\\" \\"three\\""}}}]}}"""),
 ])
 def query_filtered(request):
     return request.param
