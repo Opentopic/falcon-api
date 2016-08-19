@@ -733,6 +733,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
     User input can be validated by attaching the `falconjsonio.schema.request_schema()` decorator.
     """
     VIOLATION_UNIQUE = '23505'
+    AGGR_GROUPBY = 'group_by'
 
     def __init__(self, objects_class, db_engine, max_limit=None, eager_limit=None):
         """
@@ -804,9 +805,12 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             'prefix': 'totals_',
         }
         aggregates = []
+        group_by = []
         for total in totals:
             for aggregate, columns in total.items():
                 if not columns:
+                    if aggregate == self.AGGR_GROUPBY:
+                        raise HTTPBadRequest('Invalid attribute', 'Group by option requires at least one column name')
                     aggregates.append(Function(aggregate, *primary_keys).label(aggregate))
                     continue
                 if not isinstance(columns, list):
@@ -815,9 +819,15 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                     expression = self._parse_tokens(self.objects_class, column.split('__'), None, relationships,
                                                     lambda c, n, v: n)
                     if expression is not None:
-                        aggregates.append(Function(aggregate, expression).label(aggregate))
+                        if aggregate == self.AGGR_GROUPBY:
+                            group_by.append(expression)
+                            aggregates.append(expression)
+                        else:
+                            aggregates.append(Function(aggregate, expression).label(aggregate))
         agg_query = self._apply_joins(queryset, relationships, distinct=False)
         agg_query = agg_query.statement.with_only_columns(aggregates).order_by(None)
+        if group_by:
+            agg_query = agg_query.group_by(*group_by)
         return agg_query
 
     def get_object_list(self, queryset, limit=None, offset=None):
