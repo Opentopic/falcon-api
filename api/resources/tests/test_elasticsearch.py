@@ -97,11 +97,17 @@ def query_ordered(request):
 
 @pytest.fixture(params=[
     ("""[{"sum": ["other_models__id"]}]""",
-     """{"aggs": {"sum": {"sum": {"field": "other_models.id"}}},
+     """{"aggs": {"other_models": {"nested": {"path": "other_models",
+                                              "aggs": {"sum": {"sum": {"field": "other_models.id"}}}}},
          "query": {"match_all": {}}}"""),
-    ("""[{"sum": ["other_models__id"]},
+
+    ("""[{"count": ["other_models__id"]},
          {"group_by": ["other_models__name"]}]""",
-     """{"aggs": {"sum": {"sum": {"field": "other_models.id"}}},
+     """{"aggs": {"other_models": {"nested": {
+             "path": "other_models",
+             "aggs": {"name": {"terms": {"field": "other_models.name", "size": 0},
+                                         "aggs": {"count": {"count": {"field": "other_models.id"}}}}}
+         }}},
          "query": {"match_all": {}}}"""),
 ])
 def query_totals(request):
