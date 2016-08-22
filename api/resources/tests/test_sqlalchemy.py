@@ -168,12 +168,12 @@ def query_ordered(request):
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
 JOIN other_table AS totals_other_models_1 ON totals_other_models_1.id = m2m_table_1.other_model_id"""),
-    ("""[{"sum": ["other_models__id"]},
+    ("""[{"count": ["other_models__id"]},
          {"group_by": ["other_models__name"]}]""",
-     """SELECT sum(totals_other_models_1.id) AS sum, totals_other_models_1.name %20
+     """SELECT count(totals_other_models_1.id) AS count, totals_other_models_1.name %20
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
-JOIN other_table AS totals_other_models_1 ON totals_other_models_1.id = m2m_table_1.other_model_id
+JOIN other_table AS totals_other_models_1 ON totals_other_models_1.id = m2m_table_1.other_model_id %0A
 GROUP BY totals_other_models_1.name"""),
 ])
 def query_totals(request):

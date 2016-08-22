@@ -78,10 +78,46 @@ class ElasticSearchMixin(object):
                 expressions.append(expression)
         result = None
         if len(expressions) > 1:
+            expressions = self._group_nested(expressions, default_op)
+        if len(expressions) > 1:
             result = {'bool': {default_op: expressions}}
         elif len(expressions) == 1:
             result = expressions[0] if default_op != 'must_not' else {'bool': {'must_not': expressions[0]}}
         return result
+
+    def _group_nested(self, parts, op):
+        """
+        Group all nested queries with common path, so {a__b__c, a__b__d, a__e, f} becomes {a: {b: {c, d}, e}, f}
+        :param parts:
+        :type parts: list[dict]
+
+        :param op:
+        :type op: str
+
+        :return: modified parts
+        :rtype: list[dict]
+        """
+        parts = list(parts)
+        while True:
+            longest_path = None
+            for part in parts:
+                if part.keys() == ['nested']:
+                    if longest_path is None or part['nested']['path'].count('.') > longest_path.count('.'):
+                        longest_path = part['nested']['path']
+            if longest_path is None:
+                break
+            new_parts = []
+            group = []
+            for part in parts:
+                if part.keys() == ['nested'] and part['nested']['path'] == longest_path:
+                    group.append(part['nested']['query'])
+                else:
+                    new_parts.append(part)
+            if len(group) <= 1:
+                break
+            parts = new_parts
+            parts.append({'nested': {'path': longest_path, 'query': {'bool': {op: parts}}}})
+        return parts
 
     def _parse_logical_op(self, arg, value, op):
         if isinstance(value, dict):
@@ -96,6 +132,8 @@ class ElasticSearchMixin(object):
             if subexpressions is not None:
                 parts.append(subexpressions)
         result = None
+        if len(parts) > 1:
+            parts = self._group_nested(parts, op)
         if len(parts) > 1:
             result = {'bool': {op: parts}}
         elif len(parts) == 1:
@@ -245,15 +283,19 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         queryset = self._build_total_expressions(queryset, totals)
         result = queryset.execute()._d_.get('aggregations', {})
         result['count'] = {'value': queryset.execute()._d_['hits']['total']}
+        # TODO: check if any value contains a 'buckets' key and process its contents into a list
         return {'total_' + key: value['value'] for key, value in result.items()}
 
     def _build_total_expressions(self, queryset, totals):
         aggregates = {}
+        group_by = {}
         for total in totals:
             for aggregate, columns in total.items():
                 if aggregate == 'count':
                     continue
                 if not columns:
+                    if aggregate == self.AGGR_GROUPBY:
+                        raise HTTPBadRequest('Invalid attribute', 'Group by option requires at least one column name')
                     aggregates[aggregate] = {aggregate: {'field': 'id'}}
                     continue
                 if not isinstance(columns, list):
@@ -262,7 +304,15 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                     expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n,
                                                     wrap_nested=False)
                     if expression is not None:
-                        aggregates[aggregate] = {aggregate: {'field': expression}}
+                        if aggregate == self.AGGR_GROUPBY:
+                            group_by[column] = expression
+                        else:
+                            aggregates[aggregate] = {aggregate: {'field': expression}}
+        for name, expression in group_by.items():
+            if aggregates:
+                aggregates = {name: {'terms': {'field': expression, 'size': 0}, 'aggs': aggregates}}
+            else:
+                aggregates = {name: {'terms': {'field': expression, 'size': 0}}}
         if aggregates:
             return queryset.update_from_dict({'aggs': aggregates})
         return queryset

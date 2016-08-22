@@ -733,7 +733,6 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
     User input can be validated by attaching the `falconjsonio.schema.request_schema()` decorator.
     """
     VIOLATION_UNIQUE = '23505'
-    AGGR_GROUPBY = 'group_by'
 
     def __init__(self, objects_class, db_engine, max_limit=None, eager_limit=None):
         """
