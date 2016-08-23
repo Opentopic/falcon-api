@@ -286,11 +286,18 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         result = {}
         for key, value in aggs.items():
             if 'buckets' in value:
-                # TODO: support nested aggs when bucket[key]['value'] also contains 'buckets'
-                result['total_' + key] = {
-                    bucket['key']: bucket['doc_count'] if key not in bucket else bucket[key]['value']
-                    for bucket in value['buckets']
-                }
+                values = {}
+                values_key = None
+                for bucket in value['buckets']:
+                    if values_key is None:
+                        for bucket_key in bucket.keys():
+                            if bucket_key == 'key' or bucket_key == 'doc_count':
+                                continue
+                            values_key = bucket_key
+                            break
+                    # TODO: support nested aggs when bucket[key]['value'] also contains 'buckets'
+                    values[bucket['key']] = bucket['doc_count'] if values_key is None else bucket[values_key]['value']
+                result['total_' + (values_key if values_key else 'count')] = values
             else:
                 result['total_' + key] = value['value']
         return result
