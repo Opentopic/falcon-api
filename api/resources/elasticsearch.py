@@ -281,10 +281,19 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         if not totals:
             return {}
         queryset = self._build_total_expressions(queryset, totals)
-        result = queryset.execute()._d_.get('aggregations', {})
-        result['count'] = {'value': queryset.execute()._d_['hits']['total']}
-        # TODO: check if any value contains a 'buckets' key and process its contents into a list
-        return {'total_' + key: value['value'] for key, value in result.items()}
+        aggs = queryset.execute()._d_.get('aggregations', {})
+        aggs['count'] = {'value': queryset.execute()._d_['hits']['total']}
+        result = {}
+        for key, value in aggs.items():
+            if 'buckets' in value:
+                # TODO: support nested aggs when bucket[key]['value'] also contains 'buckets'
+                result['total_' + key] = {
+                    bucket['key']: bucket['doc_count'] if key not in bucket else bucket[key]['value']
+                    for bucket in value['buckets']
+                }
+            else:
+                result['total_' + key] = value['value']
+        return result
 
     def _build_total_expressions(self, queryset, totals):
         aggregates = {}

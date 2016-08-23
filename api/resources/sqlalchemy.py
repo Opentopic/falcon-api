@@ -787,13 +787,15 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
     def get_total_objects(self, queryset, totals):
         if not totals:
             return {}
-        stmt = self._build_total_expressions(queryset, totals)
-        result = queryset.session.execute(stmt).first()
-        if result is None:
+        agg_query = self._build_total_expressions(queryset, totals)
+        # TODO: if there's one than more row in results split dimensions and metrics
+        aggs = queryset.session.execute(agg_query).first()
+        if aggs is None:
             return {}
-
-        return {'total_' + key: value if not isinstance(value, Decimal) else float(value)
-                for key, value in result.items()}
+        result = {}
+        for key, value in aggs.items():
+            result['total_' + key] = value if not isinstance(value, Decimal) else float(value)
+        return result
 
     def _build_total_expressions(self, queryset, totals):
         mapper = inspect(self.objects_class)
@@ -820,11 +822,10 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                     if expression is not None:
                         if aggregate == self.AGGR_GROUPBY:
                             group_by.append(expression)
-                            aggregates.append(expression)
                         else:
                             aggregates.append(Function(aggregate, expression).label(aggregate))
         agg_query = self._apply_joins(queryset, relationships, distinct=False)
-        agg_query = agg_query.statement.with_only_columns(aggregates).order_by(None)
+        agg_query = agg_query.statement.with_only_columns(group_by + aggregates).order_by(None)
         if group_by:
             agg_query = agg_query.group_by(*group_by)
         return agg_query
