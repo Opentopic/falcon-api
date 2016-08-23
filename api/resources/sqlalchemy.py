@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from datetime import datetime, time
 from decimal import Decimal
 
+import collections
 import falcon
 import rapidjson as json
 
@@ -62,6 +63,7 @@ class AlchemyMixin(object):
         'month': lambda c, x: extract('month', c) == x,
         'day': lambda c, x: extract('day', c) == x,
         'func': Function,
+        'sfunc': Function,
     }
     _logical_operators = {
         'or': or_,
@@ -438,7 +440,10 @@ class AlchemyMixin(object):
                     if tokens[-1] in self._underscore_operators:
                         expression = self._underscore_operators[tokens[-1]](expression, value)
                     else:
-                        expression = Function(tokens[-1], expression, value)
+                        if token != 'sfunc':
+                            expression = Function(tokens[-1], expression, value)
+                        else:
+                            expression = Function(tokens[-1], expression)
                 else:
                     expression = op(column_name, value)
                 if token == 'isnull':
@@ -787,14 +792,29 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
     def get_total_objects(self, queryset, totals):
         if not totals:
             return {}
-        agg_query = self._build_total_expressions(queryset, totals)
+        agg_query, group_cols = self._build_total_expressions(queryset, totals)
         # TODO: if there's one than more row in results split dimensions and metrics
-        aggs = queryset.session.execute(agg_query).first()
-        if aggs is None:
-            return {}
-        result = {}
-        for key, value in aggs.items():
-            result['total_' + key] = value if not isinstance(value, Decimal) else float(value)
+
+        def nested_dict(n, type):
+            """Creates an n-dimension dictionary where the n-th dimension is of type 'type'
+            """
+            if n <= 1:
+                return type()
+            return collections.defaultdict(lambda: nested_dict(n - 1, type))
+
+        result = nested_dict(len(group_cols) + 2, None)
+        for aggs in queryset.session.execute(agg_query):
+            for metric_key, metric_value in aggs.items():
+                if metric_key in group_cols:
+                    continue
+                last_result = result['total_' + metric_key]
+                for dim_key, dim_value in aggs.items():
+                    if dim_key not in group_cols:
+                        continue
+                    # TODO: last dimensions shouldn't change the reference
+                    # TODO: handle empty group_cols
+                    last_result = last_result[dim_value]
+                last_result.append(metric_value if not isinstance(metric_value, Decimal) else float(metric_value))
         return result
 
     def _build_total_expressions(self, queryset, totals):
@@ -806,6 +826,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             'prefix': 'totals_',
         }
         aggregates = []
+        group_cols = {}
         group_by = []
         for total in totals:
             for aggregate, columns in total.items():
@@ -821,14 +842,15 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                                                     lambda c, n, v: n)
                     if expression is not None:
                         if aggregate == self.AGGR_GROUPBY:
+                            group_cols[column] = expression.label(column)
                             group_by.append(expression)
                         else:
                             aggregates.append(Function(aggregate, expression).label(aggregate))
         agg_query = self._apply_joins(queryset, relationships, distinct=False)
-        agg_query = agg_query.statement.with_only_columns(group_by + aggregates).order_by(None)
+        agg_query = agg_query.statement.with_only_columns(list(group_cols.values()) + aggregates).order_by(None)
         if group_by:
             agg_query = agg_query.group_by(*group_by)
-        return agg_query
+        return agg_query, group_cols
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
