@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import datetime, time
 from decimal import Decimal
@@ -792,8 +793,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
     def get_total_objects(self, queryset, totals):
         if not totals:
             return {}
-        agg_query, group_cols = self._build_total_expressions(queryset, totals)
-        # TODO: if there's one than more row in results split dimensions and metrics
+        agg_query, dimensions = self._build_total_expressions(queryset, totals)
 
         def nested_dict(n, type):
             """Creates an n-dimension dictionary where the n-th dimension is of type 'type'
@@ -802,19 +802,17 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                 return type()
             return collections.defaultdict(lambda: nested_dict(n - 1, type))
 
-        result = nested_dict(len(group_cols) + 2, None)
+        result = nested_dict(len(dimensions) + 2, None)
         for aggs in queryset.session.execute(agg_query):
             for metric_key, metric_value in aggs.items():
-                if metric_key in group_cols:
+                if metric_key in dimensions:
                     continue
-                last_result = result['total_' + metric_key]
-                for dim_key, dim_value in aggs.items():
-                    if dim_key not in group_cols:
-                        continue
-                    # TODO: last dimensions shouldn't change the reference
-                    # TODO: handle empty group_cols
-                    last_result = last_result[dim_value]
-                last_result.append(metric_value if not isinstance(metric_value, Decimal) else float(metric_value))
+                last_result = result
+                last_key = 'total_' + metric_key
+                for dimension in dimensions:
+                    last_result = last_result[last_key]
+                    last_key = aggs[dimension]
+                last_result[last_key] = metric_value if not isinstance(metric_value, Decimal) else float(metric_value)
         return result
 
     def _build_total_expressions(self, queryset, totals):
@@ -826,7 +824,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             'prefix': 'totals_',
         }
         aggregates = []
-        group_cols = {}
+        group_cols = OrderedDict()
         group_by = []
         for total in totals:
             for aggregate, columns in total.items():
@@ -850,7 +848,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         agg_query = agg_query.statement.with_only_columns(list(group_cols.values()) + aggregates).order_by(None)
         if group_by:
             agg_query = agg_query.group_by(*group_by)
-        return agg_query, group_cols
+        return agg_query, list(group_cols.keys())
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:
