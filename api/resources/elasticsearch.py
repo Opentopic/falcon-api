@@ -85,22 +85,22 @@ class ElasticSearchMixin(object):
             result = expressions[0] if default_op != 'must_not' else {'bool': {'must_not': expressions[0]}}
         return result
 
-    def _group_nested(self, parts, op):
+    def _group_nested(self, expressions, op):
         """
         Group all nested queries with common path, so {a__b__c, a__b__d, a__e, f} becomes {a: {b: {c, d}, e}, f}
-        :param parts:
-        :type parts: list[dict]
+        :param expressions: expressions returned by _parse_tokens()
+        :type expressions: list[dict]
 
-        :param op:
+        :param op: an operator that would be used to join expressions
         :type op: str
 
-        :return: modified parts
+        :return: modified expressions
         :rtype: list[dict]
         """
-        parts = list(parts)
+        expressions = list(expressions)
         while True:
             longest_path = None
-            for part in parts:
+            for part in expressions:
                 if part.keys() == ['nested']:
                     if longest_path is None or part['nested']['path'].count('.') > longest_path.count('.'):
                         longest_path = part['nested']['path']
@@ -108,16 +108,16 @@ class ElasticSearchMixin(object):
                 break
             new_parts = []
             group = []
-            for part in parts:
+            for part in expressions:
                 if part.keys() == ['nested'] and part['nested']['path'] == longest_path:
                     group.append(part['nested']['query'])
                 else:
                     new_parts.append(part)
             if len(group) <= 1:
                 break
-            parts = new_parts
-            parts.append({'nested': {'path': longest_path, 'query': {'bool': {op: parts}}}})
-        return parts
+            expressions = new_parts
+            expressions.append({'nested': {'path': longest_path, 'query': {'bool': {op: expressions}}}})
+        return expressions
 
     def _parse_logical_op(self, arg, value, op):
         if isinstance(value, dict):
