@@ -170,7 +170,7 @@ JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
 JOIN other_table AS totals_other_models_1 ON totals_other_models_1.id = m2m_table_1.other_model_id"""),
     ("""[{"count": ["other_models__id"]},
          {"group_by": ["other_models__name"]}]""",
-     """SELECT count(totals_other_models_1.id) AS count, totals_other_models_1.name %20
+     """SELECT totals_other_models_1.name AS other_models__name, count(totals_other_models_1.id) AS count %20
 FROM some_table %0A
 JOIN m2m_table AS m2m_table_1 ON some_table.id = m2m_table_1.model_id %0A
 JOIN other_table AS totals_other_models_1 ON totals_other_models_1.id = m2m_table_1.other_model_id %0A
@@ -234,7 +234,7 @@ def test_totals(engine, session, query_totals):
     if isinstance(conditions, str):
         conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
     c = CollectionResource(objects_class=Model, db_engine=engine)
-    stmt = c._build_total_expressions(session.query(Model), conditions)
+    stmt, _ = c._build_total_expressions(session.query(Model), conditions)
     assert str(stmt.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
 
 
