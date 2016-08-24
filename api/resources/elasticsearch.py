@@ -43,7 +43,6 @@ class ElasticSearchMixin(object):
     }
 
     def serialize(self, obj):
-        # TODO: unflatten relations etc: search for keys with __, group by prefix, turn into list of objects
         return obj['_source']
 
     def filter_by(self, query, conditions):
@@ -295,7 +294,6 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                                 continue
                             values_key = bucket_key
                             break
-                    # TODO: support nested aggs when bucket[key]['value'] also contains 'buckets'
                     values[bucket['key']] = bucket['doc_count'] if values_key is None else bucket[values_key]['value']
                 result['total_' + (values_key if values_key else 'count')] = values
             else:

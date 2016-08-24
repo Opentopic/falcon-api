@@ -110,20 +110,6 @@ def query_ordered(request):
      """{"aggs": {"name": {"terms": {"field": "name", "size": 0},
                                      "aggs": {"sum": {"sum": {"field": "id"}}}}},
          "query": {"match_all": {}}}"""),
-
-    # ("""[{"sum": ["other_models__id"]}]""",
-    #  """{"aggs": {"other_models": {"nested": {"path": "other_models",
-    #                                           "aggs": {"sum": {"sum": {"field": "other_models.id"}}}}}},
-    #      "query": {"match_all": {}}}"""),
-
-    # ("""[{"count": ["other_models__id"]},
-    #      {"group_by": ["other_models__name"]}]""",
-    #  """{"aggs": {"other_models": {"nested": {
-    #          "path": "other_models",
-    #          "aggs": {"name": {"terms": {"field": "other_models.name", "size": 0},
-    #                                      "aggs": {"count": {"count": {"field": "other_models.id"}}}}}
-    #      }}},
-    #      "query": {"match_all": {}}}"""),
 ])
 def query_totals(request):
     return request.param
