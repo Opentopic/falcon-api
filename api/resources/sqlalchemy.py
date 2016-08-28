@@ -1,7 +1,9 @@
+from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import datetime, time
 from decimal import Decimal
 
+import collections
 import falcon
 import rapidjson as json
 
@@ -62,6 +64,7 @@ class AlchemyMixin(object):
         'month': lambda c, x: extract('month', c) == x,
         'day': lambda c, x: extract('day', c) == x,
         'func': Function,
+        'sfunc': Function,
     }
     _logical_operators = {
         'or': or_,
@@ -438,7 +441,10 @@ class AlchemyMixin(object):
                     if tokens[-1] in self._underscore_operators:
                         expression = self._underscore_operators[tokens[-1]](expression, value)
                     else:
-                        expression = Function(tokens[-1], expression, value)
+                        if token != 'sfunc':
+                            expression = Function(tokens[-1], expression, value)
+                        else:
+                            expression = Function(tokens[-1], expression)
                 else:
                     expression = op(column_name, value)
                 if token == 'isnull':
@@ -787,13 +793,27 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
     def get_total_objects(self, queryset, totals):
         if not totals:
             return {}
-        stmt = self._build_total_expressions(queryset, totals)
-        result = queryset.session.execute(stmt).first()
-        if result is None:
-            return {}
+        agg_query, dimensions = self._build_total_expressions(queryset, totals)
 
-        return {'total_' + key: value if not isinstance(value, Decimal) else float(value)
-                for key, value in result.items()}
+        def nested_dict(n, type):
+            """Creates an n-dimension dictionary where the n-th dimension is of type 'type'
+            """
+            if n <= 1:
+                return type()
+            return collections.defaultdict(lambda: nested_dict(n - 1, type))
+
+        result = nested_dict(len(dimensions) + 2, None)
+        for aggs in queryset.session.execute(agg_query):
+            for metric_key, metric_value in aggs.items():
+                if metric_key in dimensions:
+                    continue
+                last_result = result
+                last_key = 'total_' + metric_key
+                for dimension in dimensions:
+                    last_result = last_result[last_key]
+                    last_key = aggs[dimension]
+                last_result[last_key] = metric_value if not isinstance(metric_value, Decimal) else float(metric_value)
+        return result
 
     def _build_total_expressions(self, queryset, totals):
         mapper = inspect(self.objects_class)
@@ -804,9 +824,13 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             'prefix': 'totals_',
         }
         aggregates = []
+        group_cols = OrderedDict()
+        group_by = []
         for total in totals:
             for aggregate, columns in total.items():
                 if not columns:
+                    if aggregate == self.AGGR_GROUPBY:
+                        raise HTTPBadRequest('Invalid attribute', 'Group by option requires at least one column name')
                     aggregates.append(Function(aggregate, *primary_keys).label(aggregate))
                     continue
                 if not isinstance(columns, list):
@@ -815,10 +839,16 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                     expression = self._parse_tokens(self.objects_class, column.split('__'), None, relationships,
                                                     lambda c, n, v: n)
                     if expression is not None:
-                        aggregates.append(Function(aggregate, expression).label(aggregate))
+                        if aggregate == self.AGGR_GROUPBY:
+                            group_cols[column] = expression.label(column)
+                            group_by.append(expression)
+                        else:
+                            aggregates.append(Function(aggregate, expression).label(aggregate))
         agg_query = self._apply_joins(queryset, relationships, distinct=False)
-        agg_query = agg_query.statement.with_only_columns(aggregates).order_by(None)
-        return agg_query
+        agg_query = agg_query.statement.with_only_columns(list(group_cols.values()) + aggregates).order_by(None)
+        if group_by:
+            agg_query = agg_query.group_by(*group_by)
+        return agg_query, list(group_cols.keys())
 
     def get_object_list(self, queryset, limit=None, offset=None):
         if limit is None:

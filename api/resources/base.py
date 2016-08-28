@@ -124,6 +124,7 @@ class BaseCollectionResource(BaseResource):
     PARAM_TOTALS = 'totals'
     PARAM_SEARCH = 'search'
     PARAM_TEXT_QUERY = 'q'
+    AGGR_GROUPBY = 'group_by'
 
     def __init__(self, objects_class, max_limit=None):
         """
