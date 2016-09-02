@@ -857,7 +857,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         if group_limit:
             columns.append(func.row_number().over(partition_by=group_cols_expr[:-1],
                                                   order_by=group_cols_expr[-1]).label('row_number'))
-        agg_query = agg_query.statement.with_only_columns(columns).order_by(order)
+        agg_query = agg_query.statement.with_only_columns(columns).order_by(None).order_by(order)
         if group_by:
             agg_query = agg_query.group_by(*group_by)
         if group_limit:
