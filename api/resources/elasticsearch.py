@@ -303,9 +303,15 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
     def _build_total_expressions(self, queryset, totals):
         aggregates = {}
         group_by = {}
+        group_limit = 0
         for total in totals:
             for aggregate, columns in total.items():
                 if aggregate == 'count':
+                    continue
+                if aggregate == self.AGGR_GROUPLIMIT:
+                    if not isinstance(columns, int):
+                        raise HTTPBadRequest('Invalid attribute', 'Group limit option requires an integer value')
+                    group_limit = columns
                     continue
                 if not columns:
                     if aggregate == self.AGGR_GROUPBY:
@@ -324,9 +330,9 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                             aggregates[aggregate] = {aggregate: {'field': expression}}
         for name, expression in group_by.items():
             if aggregates:
-                aggregates = {name: {'terms': {'field': expression, 'size': 0}, 'aggs': aggregates}}
+                aggregates = {name: {'terms': {'field': expression, 'size': group_limit}, 'aggs': aggregates}}
             else:
-                aggregates = {name: {'terms': {'field': expression, 'size': 0}}}
+                aggregates = {name: {'terms': {'field': expression, 'size': group_limit}}}
         if aggregates:
             return queryset.update_from_dict({'aggs': aggregates})
         return queryset

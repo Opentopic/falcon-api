@@ -125,6 +125,7 @@ class BaseCollectionResource(BaseResource):
     PARAM_SEARCH = 'search'
     PARAM_TEXT_QUERY = 'q'
     AGGR_GROUPBY = 'group_by'
+    AGGR_GROUPLIMIT = 'group_limit'
 
     def __init__(self, objects_class, max_limit=None):
         """
