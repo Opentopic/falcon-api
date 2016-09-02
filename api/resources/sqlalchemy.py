@@ -811,7 +811,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                 last_key = 'total_' + metric_key
                 for dimension in dimensions:
                     last_result = last_result[last_key]
-                    last_key = aggs[dimension]
+                    last_key = str(aggs[dimension])
                 last_result[last_key] = metric_value if not isinstance(metric_value, Decimal) else float(metric_value)
         return result
 
