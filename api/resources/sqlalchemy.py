@@ -853,10 +853,13 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         agg_query = self._apply_joins(queryset, relationships, distinct=False)
         group_cols_expr = list(group_cols.values())
         columns = group_cols_expr + aggregates
-        order = ','.join(list(map(str, range(1, len(columns) + 1))))
         if group_limit:
+            row_order = list(map(lambda c: c.desc(), aggregates))
             columns.append(func.row_number().over(partition_by=group_cols_expr[:-1],
-                                                  order_by=group_cols_expr[-1]).label('row_number'))
+                                                  order_by=row_order).label('row_number'))
+        order = ','.join(list(map(str, range(1, len(group_cols_expr) + 1)))
+                         + list(map(lambda c: str(c) + ' DESC', range(1 + len(group_cols_expr),
+                                                                      len(aggregates) + len(group_cols_expr) + 1))))
         agg_query = agg_query.statement.with_only_columns(columns).order_by(None).order_by(order)
         if group_by:
             agg_query = agg_query.group_by(*group_by)
