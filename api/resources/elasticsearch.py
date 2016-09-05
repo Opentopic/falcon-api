@@ -284,20 +284,22 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         aggs['count'] = {'value': queryset.execute()._d_['hits']['total']}
         result = {}
         for key, value in aggs.items():
-            if 'buckets' in value:
-                values = {}
-                values_key = None
-                for bucket in value['buckets']:
-                    if values_key is None:
-                        for bucket_key in bucket.keys():
-                            if bucket_key == 'key' or bucket_key == 'doc_count':
-                                continue
-                            values_key = bucket_key
-                            break
-                    values[bucket['key']] = bucket['doc_count'] if values_key is None else bucket[values_key]['value']
-                result['total_' + (values_key if values_key else 'count')] = values
-            else:
+            if 'buckets' not in value:
                 result['total_' + key] = value['value']
+                continue
+            values = {}
+            values_key = None
+            for bucket in value['buckets']:
+                if values_key is None:
+                    for bucket_key in bucket.keys():
+                        if bucket_key == 'key' or bucket_key == 'doc_count':
+                            continue
+                        values_key = bucket_key
+                        break
+                values[bucket['key']] = bucket['doc_count'] if values_key is None else bucket[values_key]['value']
+            result['total_' + (values_key if values_key else 'count')] = values
+        if 'total_count' not in result:
+            result['total_count'] = queryset.execute()._d_['hits']['total']
         return result
 
     def _build_total_expressions(self, queryset, totals):
