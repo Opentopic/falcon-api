@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker, subqueryload, aliased
 from sqlalchemy.orm.base import MANYTOONE
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.sql import sqltypes, operators, extract, func
-from sqlalchemy.sql.expression import and_, or_, not_, desc
+from sqlalchemy.sql.expression import and_, or_, not_, desc, select
 from sqlalchemy.sql.functions import Function
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
@@ -811,7 +811,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                 last_key = 'total_' + metric_key
                 for dimension in dimensions:
                     last_result = last_result[last_key]
-                    last_key = aggs[dimension]
+                    last_key = str(aggs[dimension])
                 last_result[last_key] = metric_value if not isinstance(metric_value, Decimal) else float(metric_value)
         return result
 
@@ -826,8 +826,14 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         aggregates = []
         group_cols = OrderedDict()
         group_by = []
+        group_limit = None
         for total in totals:
             for aggregate, columns in total.items():
+                if aggregate == self.AGGR_GROUPLIMIT:
+                    if not isinstance(columns, int):
+                        raise HTTPBadRequest('Invalid attribute', 'Group limit option requires an integer value')
+                    group_limit = columns
+                    continue
                 if not columns:
                     if aggregate == self.AGGR_GROUPBY:
                         raise HTTPBadRequest('Invalid attribute', 'Group by option requires at least one column name')
@@ -845,9 +851,21 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                         else:
                             aggregates.append(Function(aggregate, expression).label(aggregate))
         agg_query = self._apply_joins(queryset, relationships, distinct=False)
-        agg_query = agg_query.statement.with_only_columns(list(group_cols.values()) + aggregates).order_by(None)
+        group_cols_expr = list(group_cols.values())
+        columns = group_cols_expr + aggregates
+        if group_limit:
+            row_order = list(map(lambda c: c.desc(), aggregates))
+            columns.append(func.row_number().over(partition_by=group_cols_expr[:-1],
+                                                  order_by=row_order).label('row_number'))
+        order = ','.join(list(map(str, range(1, len(group_cols_expr) + 1)))
+                         + list(map(lambda c: str(c) + ' DESC', range(1 + len(group_cols_expr),
+                                                                      len(aggregates) + len(group_cols_expr) + 1))))
+        agg_query = agg_query.statement.with_only_columns(columns).order_by(None).order_by(order)
         if group_by:
             agg_query = agg_query.group_by(*group_by)
+        if group_limit:
+            subquery = agg_query.alias()
+            agg_query = select([subquery]).where(subquery.c.row_number <= group_limit)
         return agg_query, list(group_cols.keys())
 
     def get_object_list(self, queryset, limit=None, offset=None):
