@@ -26,7 +26,7 @@ setup(
         'SQLAlchemy==1.0.12',
         'sphinx-rtd-theme==0.1.9',
         'python-rapidjson==0.0.6',
-        'elasticsearch-dsl~=2.1.0',
-        'elasticsearch~=2.3.0'
+        'elasticsearch-dsl==2.1.0',
+        'elasticsearch==2.3.0'
     ],
 )
