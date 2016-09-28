@@ -28,6 +28,7 @@ class AlchemyMixin(object):
     MULTIVALUE_SEPARATOR = ','
     PARAM_RELATIONS = 'relations'
     PARAM_RELATIONS_ALL = '_all'
+    DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 
     _underscore_operators = {
         'exact':        operators.eq,
@@ -147,7 +148,7 @@ class AlchemyMixin(object):
     @classmethod
     def serialize_column(cls, column, value):
         if isinstance(value, datetime):
-            return value.strftime('%Y-%m-%dT%H:%M:%SZ')
+            return value.strftime(cls.DATETIME_FORMAT)
         elif isinstance(value, time):
             return value.isoformat()
         elif isinstance(value, Decimal):
@@ -246,7 +247,7 @@ class AlchemyMixin(object):
         if value is None:
             return None
         if isinstance(column.type, sqltypes.DateTime):
-            return datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ')
+            return datetime.strptime(value, self.DATETIME_FORMAT)
         if isinstance(column.type, sqltypes.Time):
             hour, minute, second = value.split(':')
             return time(int(hour), int(minute), int(second))
