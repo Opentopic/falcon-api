@@ -305,6 +305,16 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
             result['total_count'] = queryset.execute()._d_['hits']['total']
         return result
 
+    def _nest_aggregates(self, aggregates, group_by, group_limit):
+        for name, expression in group_by.items():
+            op = 'terms'
+            options = {'field': expression, 'size': group_limit}
+            if aggregates:
+                aggregates = {name: {op: options, 'aggs': aggregates}}
+            else:
+                aggregates = {name: {op: options}}
+        return aggregates
+
     def _build_total_expressions(self, queryset, totals):
         aggregates = {}
         group_by = {}
@@ -333,11 +343,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                             group_by[column] = expression
                         else:
                             aggregates[aggregate] = {aggregate: {'field': expression}}
-        for name, expression in group_by.items():
-            if aggregates:
-                aggregates = {name: {'terms': {'field': expression, 'size': group_limit}, 'aggs': aggregates}}
-            else:
-                aggregates = {name: {'terms': {'field': expression, 'size': group_limit}}}
+        aggregates = self._nest_aggregates(aggregates, group_by, group_limit)
         if aggregates:
             return queryset.update_from_dict({'aggs': aggregates})
         return queryset
