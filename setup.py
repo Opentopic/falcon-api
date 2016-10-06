@@ -21,11 +21,12 @@ setup(
         'Programming Language :: Python :: 3.x',
     ],
     install_requires=[
-        'falcon==1.0.0',
+        'falcon>=1.0.0',
+        'python-rapidjson>=0.0.6',
+    ],
+    tests_require=[
         'mongoengine==0.10.6',
-        'SQLAlchemy==1.0.12',
-        'sphinx-rtd-theme==0.1.9',
-        'python-rapidjson==0.0.6',
+        'SQLAlchemy>=1.0.12',
         'elasticsearch-dsl==2.1.0',
         'elasticsearch==2.3.0'
     ],
