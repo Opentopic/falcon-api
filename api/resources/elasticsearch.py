@@ -284,7 +284,6 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
             return {}
         queryset = self._build_total_expressions(queryset, totals)
         aggs = queryset.execute()._d_.get('aggregations', {})
-        aggs['count'] = {'value': queryset.execute()._d_['hits']['total']}
         result = {}
         for key, value in aggs.items():
             if 'buckets' not in value:
