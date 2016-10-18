@@ -250,13 +250,13 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         super(CollectionResource, self).__init__(objects_class, max_limit)
         self.connection = connection
 
-    def get_base_query(self):
+    def get_base_query(self, req, resp):
         return Search(using=self.connection,
                       index=self.objects_class._doc_type.index,
                       doc_type=self.objects_class)
 
     def get_queryset(self, req, resp):
-        query = self.get_base_query()
+        query = self.get_base_query(req, resp)
 
         if self.PARAM_SEARCH in req.params:
             try:
