@@ -408,7 +408,7 @@ class SingleResource(ElasticSearchMixin, BaseSingleResource):
         super(SingleResource, self).__init__(objects_class)
         self.connection = connection
 
-    def get_object(self, req, resp, path_params):
+    def get_object(self, req, resp, path_params, for_update=False):
         try:
             obj = self.objects_class.get(*path_params, using=self.connection)
         except NotFoundError:

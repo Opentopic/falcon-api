@@ -304,7 +304,7 @@ class BaseSingleResource(BaseResource):
     * PATCH - update parts of a single record
     """
 
-    def get_object(self, req, resp, path_params):
+    def get_object(self, req, resp, path_params, for_update=False):
         """
         Return a single object.
 
@@ -316,6 +316,9 @@ class BaseSingleResource(BaseResource):
 
         :param path_params: positional params from the api route
         :type path_params: dict
+
+        :param for_update: if the object is going to be updated or deleted
+        :type for_update: bool
 
         :return: a query from `object_class`
         """
@@ -363,7 +366,7 @@ class BaseSingleResource(BaseResource):
         :param resp: Falcon response
         :type resp: falcon.response.Response
         """
-        obj = self.get_object(req, resp, kwargs)
+        obj = self.get_object(req, resp, kwargs, for_update=True)
 
         self.delete(req, resp, obj)
         self.render_response({}, req, resp)
@@ -397,7 +400,7 @@ class BaseSingleResource(BaseResource):
         :param resp: Falcon response
         :type resp: falcon.response.Response
         """
-        obj = self.get_object(req, resp, kwargs)
+        obj = self.get_object(req, resp, kwargs, for_update=True)
 
         data = self.deserialize(req.context['doc'] if 'doc' in req.context else None)
         data, errors = self.clean(data)

@@ -27,7 +27,7 @@ class CollectionResource(BaseCollectionResource):
 
 
 class SingleResource(BaseSingleResource):
-    def get_object(self, req, resp, path_params):
+    def get_object(self, req, resp, path_params, for_update=False):
         pk = req.context['doc'].get('pk')
         if not pk:
             raise HTTPNotFound()

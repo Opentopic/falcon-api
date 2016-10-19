@@ -763,6 +763,23 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.__request_schemas__['POST'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
 
     def get_queryset(self, req, resp, db_session=None, limit=None):
+        """
+        Return a query object used to fetch data.
+
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+
+        :param db_session: SQLAlchemy session
+        :type db_session: sqlalchemy.orm.session.Session
+
+        :param limit: max number of records fetched
+        :type limit: int | None
+
+        :return: a query from `object_class`
+        """
         query = db_session.query(self.objects_class)
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         if self.eager_limit is None or (limit is not None and limit > self.eager_limit):
@@ -912,6 +929,23 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         self.render_response(result, req, resp)
 
     def create(self, req, resp, data, db_session=None):
+        """
+        Create a new or update an existing record using provided data.
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+
+        :param data:
+        :type data: dict
+
+        :param db_session: SQLAlchemy session
+        :type db_session: sqlalchemy.orm.session.Session
+
+        :return: created object, serialized to a dict
+        :rtype: dict
+        """
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         resource = self.save_resource(self.objects_class(), data, db_session)
         db_session.commit()
@@ -953,6 +987,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
     def __init__(self, objects_class, db_engine):
         """
         :param objects_class: class represent single element of object lists that suppose to be returned
+
         :param db_engine: SQL Alchemy engine
         :type db_engine: sqlalchemy.engine.Engine
         """
@@ -963,8 +998,26 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         self.__request_schemas__['POST'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
         self.__request_schemas__['PUT'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
 
-    def get_object(self, req, resp, path_params, db_session=None):
+    def get_object(self, req, resp, path_params, for_update=False, db_session=None):
+        """
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+
+        :param path_params: path params extracted from URL path
+        :type path_params: dict
+
+        :param for_update: if the object is going to be updated or deleted
+        :type for_update: bool
+
+        :param db_session: SQLAlchemy session
+        :type db_session: sqlalchemy.orm.session.Session
+        """
         query = db_session.query(self.objects_class)
+        if for_update:
+            query = query.with_for_update()
 
         for key, value in path_params.items():
             attr = getattr(self.objects_class, key, None)
@@ -986,7 +1039,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
     def on_get(self, req, resp, *args, **kwargs):
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         with self.session_scope(self.db_engine) as db_session:
-            obj = self.get_object(req, resp, kwargs, db_session)
+            obj = self.get_object(req, resp, kwargs, db_session=db_session)
 
             result = {
                 'results': self.serialize(obj, relations_include=relations,
@@ -1005,6 +1058,9 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         :type resp: falcon.response.Response
 
         :param obj: the object to delete
+
+        :param db_session: SQLAlchemy session
+        :type db_session: sqlalchemy.orm.session.Session
         """
         deleted = db_session.delete(obj)
         if deleted == 0:
@@ -1013,7 +1069,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
     def on_delete(self, req, resp, *args, **kwargs):
         try:
             with self.session_scope(self.db_engine) as db_session:
-                obj = self.get_object(req, resp, kwargs, db_session)
+                obj = self.get_object(req, resp, kwargs, for_update=True, db_session=db_session)
 
                 self.delete(req, resp, obj, db_session)
         except (IntegrityError, ProgrammingError) as err:
@@ -1026,6 +1082,25 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         self.render_response({}, req, resp)
 
     def update(self, req, resp, data, obj, db_session=None):
+        """
+        Create a new or update an existing record using provided data.
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+
+        :param data:
+        :type data: dict
+
+        :param obj: the object to update
+
+        :param db_session: SQLAlchemy session
+        :type db_session: sqlalchemy.orm.session.Session
+
+        :return: created or updated object, serialized to a dict
+        :rtype: dict
+        """
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
         resource = self.save_resource(obj, data, db_session)
         db_session.commit()
@@ -1036,7 +1111,7 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         status_code = falcon.HTTP_OK
         try:
             with self.session_scope(self.db_engine) as db_session:
-                obj = self.get_object(req, resp, kwargs, db_session)
+                obj = self.get_object(req, resp, kwargs, for_update=True, db_session=db_session)
 
                 data = self.deserialize(req.context['doc'] if 'doc' in req.context else None)
                 data, errors = self.clean(data)
