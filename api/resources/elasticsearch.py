@@ -1,15 +1,19 @@
-import rapidjson as json
-import time
-import logging
+from datetime import datetime, time
+from decimal import Decimal
 
-from api.resources.base import BaseCollectionResource, BaseSingleResource
+import rapidjson as json
+
+from falcon import HTTPBadRequest, HTTPNotFound
 from elasticsearch import NotFoundError
 from elasticsearch_dsl import Mapping, Field
 from elasticsearch_dsl import Search, Nested
-from falcon import HTTPBadRequest, HTTPNotFound
+
+from api.resources.base import BaseCollectionResource, BaseSingleResource
 
 
 class ElasticSearchMixin(object):
+    DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
+
     _underscore_operators = {
         'exact':        'term',
         'notexact':     'term',
@@ -43,7 +47,17 @@ class ElasticSearchMixin(object):
     }
 
     def serialize(self, obj):
-        return obj['_source']
+        return {key: self.serialize_column(value) for key, value in obj.to_dict().items()}
+
+    @classmethod
+    def serialize_column(cls, value):
+        if isinstance(value, datetime):
+            return value.strftime(cls.DATETIME_FORMAT)
+        elif isinstance(value, time):
+            return value.isoformat()
+        elif isinstance(value, Decimal):
+            return float(value)
+        return value
 
     def filter_by(self, query, conditions):
         expressions = self._build_filter_expressions(conditions, None)
@@ -351,23 +365,18 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         return queryset
 
     def on_get(self, req, resp):
-        start_seconds = time.perf_counter()
         limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
         totals = self.get_param_totals(req)
 
         queryset = self.get_queryset(req, resp)
-        qs_s = time.perf_counter() - start_seconds
 
         object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
-        ol_s = time.perf_counter() - start_seconds
         # get totals after objects to reuse main query
         totals = self.get_total_objects(queryset, totals)
-        t_s = time.perf_counter() - start_seconds
 
         # use raw data from object_list and avoid unnecessary serialization
         data = object_list.execute()._d_['hits']['hits']
-        d_s = time.perf_counter() - start_seconds
         serialized = [self.serialize(obj) for obj in data]
         result = {
             'results': serialized,
@@ -376,17 +385,6 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         }
         result.update(totals)
         self.render_response(result, req, resp)
-        r_s = time.perf_counter() - start_seconds
-        logging.getLogger().debug(
-            'ES CollectionResource: qs {}s, ol {}s, t {}s, d {}s, r {}s'.format(qs_s, ol_s, t_s, d_s, r_s),
-            extra={
-                'queryset_seconds': qs_s,
-                'object_list_seconds': ol_s,
-                'totals_seconds': t_s,
-                'data_seconds': d_s,
-                'result_seconds': r_s,
-            }
-        )
 
     def create(self, req, resp, data):
         raise NotImplementedError
