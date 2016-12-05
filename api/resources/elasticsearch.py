@@ -377,7 +377,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
 
         # use raw data from object_list and avoid unnecessary serialization
         data = object_list.execute()._d_['hits']['hits']
-        serialized = [self.serialize(obj) for obj in data]
+        serialized = [obj['_source'] for obj in data]
         result = {
             'results': serialized,
             'total': totals.pop('total_count') if 'total_count' in totals else None,
