@@ -29,6 +29,7 @@ class AlchemyMixin(object):
     PARAM_RELATIONS = 'relations'
     PARAM_RELATIONS_ALL = '_all'
     DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
+    RELATIONS_AS_LIST = False
 
     _underscore_operators = {
         'exact':        operators.eq,
@@ -175,11 +176,18 @@ class AlchemyMixin(object):
                 data.update(cls.serialize(rel_obj, skip_primary_key=True, relations_level=relations_level - 1,
                                           relations_ignore=relations_ignore))
             else:
-                data[relation.key] = {
-                    rel.id: cls.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1,
-                                          relations_ignore=relations_ignore)
-                    for rel in rel_obj if hasattr(rel, 'id')
-                }
+                if cls.RELATIONS_AS_LIST:
+                    data[relation.key] = [
+                        cls.serialize(rel, skip_primary_key=False, relations_level=relations_level - 1,
+                                      relations_ignore=relations_ignore)
+                        for rel in rel_obj if hasattr(rel, 'id')
+                    ]
+                else:
+                    data[relation.key] = {
+                        rel.id: cls.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1,
+                                              relations_ignore=relations_ignore)
+                        for rel in rel_obj if hasattr(rel, 'id')
+                    }
         return data
 
     def deserialize(self, data, mapper=None):
