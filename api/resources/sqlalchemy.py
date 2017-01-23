@@ -2,6 +2,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import datetime, time
 from decimal import Decimal
+from enum import Enum
 
 import collections
 import falcon
@@ -154,6 +155,8 @@ class AlchemyMixin(object):
             return value.isoformat()
         elif isinstance(value, Decimal):
             return float(value)
+        elif isinstance(value, Enum):
+            return value.value
         return value
 
     @classmethod
