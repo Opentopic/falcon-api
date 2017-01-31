@@ -31,6 +31,7 @@ class AlchemyMixin(object):
     PARAM_RELATIONS_ALL = '_all'
     DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
     RELATIONS_AS_LIST = False
+    IGNORE_UNKNOWN_FILTER = False
 
     _underscore_operators = {
         'exact':        operators.eq,
@@ -474,6 +475,8 @@ class AlchemyMixin(object):
                 join_chain_ext.append((column_alias, token))
                 continue
             if token not in mapper.column_attrs:
+                if self.IGNORE_UNKNOWN_FILTER:
+                    return None
                 # if token is not an op or relation it has to be a valid column
                 raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected '
                                                           'to be a known column name'.format('__'.join(tokens), token))
