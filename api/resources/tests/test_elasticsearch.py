@@ -107,15 +107,15 @@ def query_ordered(request):
 
     ("""[{"sum": ["id"]},
          {"group_by": ["name"]}]""",
-     """{"aggs": {"name": {"terms": {"field": "name", "size": 0},
-                                     "aggs": {"sum": {"sum": {"field": "id"}}}}},
+     """{"aggs": {"name": {"terms": {"field": "name", "size": 0, "order": {"sum": "desc"}},
+                           "aggs": {"sum": {"sum": {"field": "id"}}}}},
          "query": {"match_all": {}}}"""),
 
     ("""[{"sum": ["id"]},
          {"group_by": ["name"]},
          {"group_limit": 5}]""",
-     """{"aggs": {"name": {"terms": {"field": "name", "size": 5},
-                                     "aggs": {"sum": {"sum": {"field": "id"}}}}},
+     """{"aggs": {"name": {"terms": {"field": "name", "size": 5, "order": {"sum": "desc"}},
+                           "aggs": {"sum": {"sum": {"field": "id"}}}}},
          "query": {"match_all": {}}}"""),
 ])
 def query_totals(request):

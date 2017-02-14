@@ -322,10 +322,11 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         return result
 
     def _nest_aggregates(self, aggregates, group_by, group_limit):
-        for name, expression in group_by.items():
+        for name, expression in group_by:
             op = 'terms'
             options = {'field': expression, 'size': group_limit}
             if aggregates:
+                options['order'] = dict.fromkeys(aggregates.keys(), 'desc')
                 aggregates = {name: {op: options, 'aggs': aggregates}}
             else:
                 aggregates = {name: {op: options}}
@@ -333,7 +334,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
 
     def _build_total_expressions(self, queryset, totals):
         aggregates = {}
-        group_by = {}
+        group_by = []
         group_limit = 0
         for total in totals:
             for aggregate, columns in total.items():
@@ -356,7 +357,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                                                     wrap_nested=False)
                     if expression is not None:
                         if aggregate == self.AGGR_GROUPBY:
-                            group_by[column] = expression
+                            group_by.append((column, expression))
                         else:
                             aggregates[aggregate] = {aggregate: {'field': expression}}
         aggregates = self._nest_aggregates(aggregates, group_by, group_limit)
