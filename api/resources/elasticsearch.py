@@ -1,12 +1,11 @@
+import copy
+import rapidjson as json
 from datetime import datetime, time
 from decimal import Decimal
 
-import rapidjson as json
-
-from falcon import HTTPBadRequest, HTTPNotFound
 from elasticsearch import NotFoundError
-from elasticsearch_dsl import Mapping, Field
-from elasticsearch_dsl import Search, Nested
+from elasticsearch_dsl import Mapping, Field, Search, Nested
+from falcon import HTTPBadRequest, HTTPNotFound
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
@@ -110,11 +109,11 @@ class ElasticSearchMixin(object):
         :return: modified expressions
         :rtype: list[dict]
         """
-        expressions = list(expressions)
+        expressions = copy.deepcopy(expressions)
         while True:
             longest_path = None
             for part in expressions:
-                if part.keys() == ['nested']:
+                if list(part.keys()) == ['nested']:
                     if longest_path is None or part['nested']['path'].count('.') > longest_path.count('.'):
                         longest_path = part['nested']['path']
             if longest_path is None:
@@ -122,14 +121,14 @@ class ElasticSearchMixin(object):
             new_parts = []
             group = []
             for part in expressions:
-                if part.keys() == ['nested'] and part['nested']['path'] == longest_path:
+                if list(part.keys()) == ['nested'] and part['nested']['path'] == longest_path:
                     group.append(part['nested']['query'])
                 else:
                     new_parts.append(part)
             if len(group) <= 1:
                 break
             expressions = new_parts
-            expressions.append({'nested': {'path': longest_path, 'query': {'bool': {op: expressions}}}})
+            expressions.append({'nested': {'path': longest_path, 'query': {'bool': {op: group}}}})
         return expressions
 
     def _parse_logical_op(self, arg, value, op):
