@@ -79,10 +79,12 @@ def connection():
     ("""{"and": {"q": "value2",
                  "q__or": ["value", "value2"],
                  "q__and": ["one", "two", "three"]}}""",
-     """{"bool": {"must": [{"match": {"name": "value2"}},
+     """{"bool": {"must": [{"match": {"name": {"operator": "and", "boost": 1, "query": "value2"}}},
                            {"match": {"name": {"operator": "or",
+                                               "boost": 1,
                                                "query": "\\"value\\" \\"value2\\""}}},
                            {"match": {"name": {"operator": "and",
+                                               "boost": 1,
                                                "query": "\\"one\\" \\"two\\" \\"three\\""}}}]}}"""),
 ])
 def query_filtered(request):

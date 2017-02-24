@@ -223,13 +223,12 @@ class ElasticSearchMixin(object):
         return None
 
     @classmethod
-    def get_match_query(cls, value, default_op):
+    def get_match_query(cls, value, default_op, boost=1):
         if isinstance(value, list):
-            tq = {'query': ' '.join(['"' + v.replace('\\', '\\\\').replace('"', '\\"') + '"' for v in value]),
-                  'operator': 'or' if default_op == 'should' else 'and'}
-        else:
-            tq = value
-        return tq
+            value = ' '.join(['"' + v.replace('\\', '\\\\').replace('"', '\\"') + '"' for v in value])
+        return {'query': value,
+                'operator': 'or' if default_op == 'should' else 'and',
+                'boost': boost}
 
     def _build_order_expressions(self, criteria):
         """
