@@ -249,13 +249,13 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
     * limit, offset - for pagination
     * total_count - to calculate total number of items matching filters, without pagination
     * all other params are treated as filters, syntax mimics Django filters,
-      see `ElasticSearchMixin._underscore_operators`
-    User input can be validated by attaching the `falconjsonio.schema.request_schema()` decorator.
+      see :ref:`ElasticSearchMixin._underscore_operators`
     """
 
     def __init__(self, objects_class, connection, max_limit=None):
         """
         :param objects_class: class represent single element of object lists that's supposed to be returned
+
         :param connection: ElasticSearch connection or alias
         :type connection: elasticsearch.Elasticsearch | str
         """

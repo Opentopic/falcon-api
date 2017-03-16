@@ -18,5 +18,6 @@ Content type of requests and responses might be JSON or HTML, depending on which
 
 .. toctree::
     :maxdepth: 2
+    :glob:
 
     usage_*
