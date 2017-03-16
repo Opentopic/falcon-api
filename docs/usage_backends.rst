@@ -1,6 +1,6 @@
-================
-Usage - backends
-================
+========
+Backends
+========
 
 This page describes available backends and their caveats.
 

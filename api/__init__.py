@@ -7,9 +7,9 @@ Supported backends include SQL (SQLAlchemy) and NoSQL (MongoDB, ElasticSearch) d
 Typical usage include:
 
 * using provided middleware for auth and content type negotiation when creating a Falcon application,
-  see :ref:`api.middlewares`
-* registering resources, see :ref:`api.resources`
-* registering an error handler, see :ref:`api.resources.error_handlers.JsonError`
+  see :py:mod:`api.middlewares`
+* registering resources, see :py:mod:`api.resources`
+* registering an error handler, see :py:mod:`api.resources.error_handlers.JsonError`
 
 For data validation the `falconjsonio` package can be used, which provides a way
 to validate against a JSON schema (http://json-schema.org/).

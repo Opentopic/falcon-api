@@ -1,6 +1,6 @@
-===============================
-Usage - ordering and pagination
-===============================
+=======================
+Ordering and pagination
+=======================
 
 This page describes how to use ordering and pagination. This only affects fetching data from collection resources.
 

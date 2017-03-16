@@ -1,6 +1,6 @@
-=================
-Usage - filtering
-=================
+=========
+Filtering
+=========
 
 This page describes filtering params in GET requests to collection resources.
 
@@ -10,12 +10,10 @@ Simple filters
 All params that are not reserved keywords must be resource attribute or relation names with an optional operator,
 joined using two underscores (`__`).
 
-Examples:
+Examples ::
 
-```
-some_text_column=exact_text_to_look_for
-some_int_column__gte=5
-```
+    some_text_column=exact_text_to_look_for
+    some_int_column__gte=5
 
 Available operators:
 
@@ -58,11 +56,9 @@ Available operators:
 Relation filters
 ****************
 
-To filter by relation attributes, simply join the relation name and its attribute using two underscores:
+To filter by relation attributes, simply join the relation name and its attribute using two underscores::
 
-```
-relation_name__some_attribute=exact_value
-```
+    relation_name__some_attribute=exact_value
 
 Full text search
 ****************

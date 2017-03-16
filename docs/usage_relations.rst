@@ -1,6 +1,6 @@
-=================
-Usage - relations
-=================
+=========
+Relations
+=========
 
 This page describes fetching relations data in GET requests to collection resources
 and saving relations data in POST requests when creating new resources.

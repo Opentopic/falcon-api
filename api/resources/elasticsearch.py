@@ -249,7 +249,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
     * limit, offset - for pagination
     * total_count - to calculate total number of items matching filters, without pagination
     * all other params are treated as filters, syntax mimics Django filters,
-      see :ref:`ElasticSearchMixin._underscore_operators`
+      see :py:const:`ElasticSearchMixin._underscore_operators`
     """
 
     def __init__(self, objects_class, connection, max_limit=None):

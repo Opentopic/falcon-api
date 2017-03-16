@@ -1,6 +1,6 @@
-==================
-Usage - aggregates
-==================
+==========
+Aggregates
+==========
 
 This page describes aggregate params in GET requests to collection resources.
 
