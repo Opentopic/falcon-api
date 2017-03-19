@@ -10,10 +10,11 @@ class HtmlTranslator(object):
 
     When using plain HTML pages for resources it's not possible to use other HTTP verbs than GET and POST.
     Extra steps needs to be taken when preparing resources:
+
     * set RELATIONS_AS_LIST = True
     * add a templates property with a verb to file map, possibly using `objects_class` argument in init()
     * call `on_post()` in `on_put()`
-    * perform a redirect after `on_post()`: `resp.status = HTTP_FOUND; resp.set_header('Location', req.path)`
+    * perform a redirect after `on_post()`: :code:`resp.status = HTTP_FOUND; resp.set_header('Location', req.path)`
     """
     def __init__(self, template_env):
         self.template_env = template_env

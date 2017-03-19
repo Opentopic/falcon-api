@@ -8,7 +8,10 @@ class JsonError(Exception):
     """
     Converts all exceptions to falcon.HTTPError so they're serializable and match requested content type.
 
-    Usage ::
+    Usage:
+
+    .. code-block:: python
+
         app.add_error_handler(Exception, JsonError.handle)
     """
     @staticmethod
@@ -41,7 +44,10 @@ class HtmlError(Exception):
     """
     Renders a HTML template containing error details.
 
-    Usage ::
+    Usage:
+
+    .. code-block:: python
+
         handler = HtmlError(translator)
         app.add_error_handler(Exception, handler.handle)
     """

@@ -246,6 +246,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
     Allows to fetch a collection of a resource (GET) and to create new resource in that collection (POST).
     May be extended to allow batch operations (ex. PATCH).
     When fetching a collection (GET), following params are supported:
+
     * limit, offset - for pagination
     * total_count - to calculate total number of items matching filters, without pagination
     * all other params are treated as filters, syntax mimics Django filters,
@@ -393,7 +394,6 @@ class SingleResource(ElasticSearchMixin, BaseSingleResource):
     """
     Allows to fetch a single resource (GET) and to update (PATCH, PUT) or remove it (DELETE).
     When fetching a resource (GET).
-    User input can be validated by attaching the `falconjsonio.schema.request_schema()` decorator.
     """
 
     def __init__(self, objects_class, connection):
