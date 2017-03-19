@@ -5,6 +5,9 @@ from decimal import Decimal
 from enum import Enum
 
 import collections
+from functools import lru_cache
+
+import alchemyjsonschema
 import falcon
 import rapidjson as json
 
@@ -268,6 +271,11 @@ class AlchemyMixin(object):
         if isinstance(column.type, sqltypes.Float):
             return float(value)
         return value
+
+    @lru_cache(maxsize=None)
+    def get_schema(self, objects_class):
+        factory = alchemyjsonschema.SchemaFactory(alchemyjsonschema.StructuralWalker)
+        return factory(objects_class)
 
     def filter_by(self, query, conditions, order_criteria=None):
         """
@@ -1061,6 +1069,13 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
             }
 
         self.render_response(result, req, resp)
+
+    def on_head(self, req, resp, *args, **kwargs):
+        with self.session_scope(self.db_engine) as db_session:
+            # call get_object to check if it exists
+            self.get_object(req, resp, kwargs, db_session=db_session)
+
+        resp.status = falcon.HTTP_NO_CONTENT
 
     def delete(self, req, resp, obj, db_session=None):
         """

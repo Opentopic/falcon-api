@@ -66,6 +66,17 @@ class BaseResource(object):
 
         return data
 
+    def get_schema(self, objects_class):
+        """
+        Gets a JSON Schema (http://json-schema.org) for current objects class.
+
+        :param objects_class: class represent single element of object lists that suppose to be returned
+
+        :return: a JSON Schema
+        :rtype: dict
+        """
+        raise NotImplementedError
+
     def clean(self, data):
         """
         Called after :func:`deserialize`, might perform more complex data filtering and validation.
@@ -108,6 +119,39 @@ class BaseResource(object):
         elif 'doc' in req.context:
             return req.context['doc'].get(name, default)
         return default
+
+    def on_options(self, req, resp, **kwargs):
+        """
+        Returns allowed methods in the Allow HTTP header.
+        Also returns a JSON Schema, if supported by current resource.
+
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+        """
+        allowed_methods = []
+
+        for method in falcon.HTTP_METHODS:
+            try:
+                responder = getattr(self, 'on_' + method.lower())
+            except AttributeError:
+                # resource does not implement this method
+                pass
+            else:
+                # Usually expect a method, but any callable will do
+                if callable(responder):
+                    allowed_methods.append(method)
+
+        resp.set_header('Allow', ', '.join(sorted(allowed_methods)))
+        resp.status = falcon.HTTP_NO_CONTENT
+        try:
+            schema = self.get_schema(self.objects_class)
+        except NotImplementedError:
+            pass
+        else:
+            self.render_response({'schema': schema}, req, resp)
 
 
 class BaseCollectionResource(BaseResource):
@@ -245,6 +289,16 @@ class BaseCollectionResource(BaseResource):
         result.update(totals)
         self.render_response(result, req, resp)
 
+    def on_head(self, req, resp):
+        """
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+        """
+        resp.status = falcon.HTTP_NO_CONTENT
+
     def create(self, req, resp, data):
         """
         Create a new or update an existing record using provided data.
@@ -340,6 +394,18 @@ class BaseSingleResource(BaseResource):
             'results': self.serialize(obj),
         }
         self.render_response(result, req, resp)
+
+    def on_head(self, req, resp, *args, **kwargs):
+        """
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+        """
+        # call get_object to check if it exists
+        self.get_object(req, resp, kwargs)
+        resp.status = falcon.HTTP_NO_CONTENT
 
     def delete(self, req, resp, obj):
         """
