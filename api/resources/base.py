@@ -145,13 +145,17 @@ class BaseResource(object):
                     allowed_methods.append(method)
 
         resp.set_header('Allow', ', '.join(sorted(allowed_methods)))
-        resp.status = falcon.HTTP_NO_CONTENT
+
+        result = {'name': self.objects_class.__class__.__name__}
+        if self.objects_class.__doc__:
+            result['description'] = self.objects_class.__doc__
         try:
             schema = self.get_schema(self.objects_class)
         except NotImplementedError:
             pass
         else:
-            self.render_response({'schema': schema}, req, resp)
+            result['schema'] = schema
+        self.render_response(result, req, resp)
 
 
 class BaseCollectionResource(BaseResource):
