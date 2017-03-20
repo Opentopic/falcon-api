@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from elasticsearch import NotFoundError
 from elasticsearch_dsl import Mapping, Field, Search, Nested
-from falcon import HTTPBadRequest, HTTPNotFound
+from falcon import HTTPBadRequest, HTTPNotFound, HTTP_NO_CONTENT
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
@@ -363,7 +363,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
             return queryset.update_from_dict({'aggs': aggregates})
         return queryset
 
-    def on_get(self, req, resp):
+    def get_data(self, req, resp):
         limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
         totals = self.get_param_totals(req)
@@ -374,16 +374,35 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         # get totals after objects to reuse main query
         totals = self.get_total_objects(queryset, totals)
 
+        return object_list, totals
+
+    def on_get(self, req, resp):
+        object_list, totals = self.get_data(req, resp)
+
         # use raw data from object_list and avoid unnecessary serialization
         data = object_list.execute()._d_['hits']['hits']
         serialized = [obj['_source'] for obj in data]
         result = {
             'results': serialized,
             'total': totals.pop('total_count') if 'total_count' in totals else None,
-            'returned': len(serialized)
+            'returned': len(serialized),
         }
         result.update(totals)
+        resp.set_headers({'x-api-total': result['total'],
+                          'x-api-returned': result['returned']})
         self.render_response(result, req, resp)
+
+    def on_head(self, req, resp):
+        object_list, totals = self.get_data(req, resp)
+
+        # use raw data from object_list and avoid unnecessary serialization
+        data = object_list.execute()._d_['hits']['hits']
+        headers = {
+            'x-api-total': totals.pop('total_count') if 'total_count' in totals else None,
+            'x-api-returned': len(data),
+        }
+        resp.set_headers(headers)
+        resp.status = HTTP_NO_CONTENT
 
     def create(self, req, resp, data):
         raise NotImplementedError

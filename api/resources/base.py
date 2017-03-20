@@ -263,10 +263,8 @@ class BaseCollectionResource(BaseResource):
             return queryset[offset:limit + offset]
         return queryset[offset:]
 
-    def on_get(self, req, resp):
+    def get_data(self, req, resp):
         """
-        Gets a list of records.
-
         :param req: Falcon request
         :type req: falcon.request.Request
 
@@ -282,13 +280,28 @@ class BaseCollectionResource(BaseResource):
 
         object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
 
-        serialized = [self.serialize(obj) for obj in object_list]
+        return object_list, totals
+
+    def on_get(self, req, resp):
+        """
+        Gets a list of records.
+
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+        """
+        object_list, totals = self.get_data(req, resp)
+
         result = {
-            'results': serialized,
+            'results': [self.serialize(obj) for obj in object_list],
             'total': totals.pop('total_count') if 'total_count' in totals else None,
-            'returned': len(serialized)
+            'returned': len(object_list)
         }
         result.update(totals)
+        resp.set_headers({'x-api-total': result['total'],
+                          'x-api-returned': result['returned']})
         self.render_response(result, req, resp)
 
     def on_head(self, req, resp):
@@ -299,6 +312,13 @@ class BaseCollectionResource(BaseResource):
         :param resp: Falcon response
         :type resp: falcon.response.Response
         """
+        object_list, totals = self.get_data(req, resp)
+
+        headers = {
+            'x-api-total': totals.pop('total_count') if 'total_count' in totals else None,
+            'x-api-returned': len(object_list)
+        }
+        resp.set_headers(headers)
         resp.status = falcon.HTTP_NO_CONTENT
 
     def create(self, req, resp, data):
