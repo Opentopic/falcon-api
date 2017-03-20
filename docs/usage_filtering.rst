@@ -60,13 +60,36 @@ To filter by relation attributes, simply join the relation name and its attribut
 
     relation_name__some_attribute=exact_value
 
-Full text search
-****************
-
-This chapter describes the `q`, `q__and` and `q__or` params.
-
 Advanced filters
 ****************
 
-A `search` param provided an alternative syntax for filters by using JSON. This allows combining filters using `and`, `or` and `not` logical operators.
+A `search` param provided an alternative syntax for filters by using JSON instead of plain key-value pairs.
+This allows combining filters using `and`, `or` and `not` logical operators.
+Value for a logical operator must be either a:
 
+* dict, where keys are other operator names
+* list of dicts
+
+
+Example ::
+
+    {
+      "and": [
+        {"category_id__in": [1, 2, 3, 4]},
+        {"not": {"name__startswith":"Bollywood"}}
+      ]
+    }
+
+Note: advanced filters will be joined with simple filters using `and`.
+To improve code readability try to avoid mixing those two formats.
+
+Full text search
+****************
+
+A resource might optionally support full text search. Use the `q` param to search for a phrase
+on attributes defined in the resource or choose specific attributes by appending them after two underscores (`__`).
+
+Special variants:
+
+* `q__and` - all phrase parts must be present in results
+* `q__or` - any of phrase parts must be present in results

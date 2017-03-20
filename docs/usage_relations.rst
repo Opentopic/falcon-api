@@ -12,7 +12,16 @@ To request relations data simply pass a comma separated list of relations in the
 
 To fetch all relations, use the `_all` value.
 
-Note: this only allows fetching directly related objects. For deeper serialisation, see :ref:`serialisation`.
+Note: this only allows fetching directly related objects. For deeper serialisation,
+override the :py:meth:`api.resources.base.BaseResource.serialize()` method.
+
+.. code-block:: python
+
+    @classmethod
+    def serialize(cls, obj, relations_level=1, *args, **kwargs):
+        if isinstance(obj, models.Article):
+            relations_level += 1
+        return super(ArticleMixin, cls).serialize(obj, relations_level=relations_level, *args, **kwargs)
 
 Creating
 ********
