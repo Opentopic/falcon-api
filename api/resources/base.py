@@ -150,11 +150,9 @@ class BaseResource(object):
         if self.objects_class.__doc__:
             result['description'] = self.objects_class.__doc__
         try:
-            schema = self.get_schema(self.objects_class)
+            result['schema'] = self.get_schema(self.objects_class)
         except NotImplementedError:
             pass
-        else:
-            result['schema'] = schema
         self.render_response(result, req, resp)
 
 
