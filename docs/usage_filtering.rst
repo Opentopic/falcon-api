@@ -23,21 +23,21 @@ Available operators:
 * lt is <
 * gte is >=
 * lte is <=
-* range is >= and <=
+* range is >= and <= (BETWEEN)
 * notrange is <= and >=
 * in matches any value from a list
 * notin
-* contains matches a subset in a multivalue attribute
+* contains matches a subset in a multivalue attribute (the `&&` operator)
 * notcontains
 * match is a database specific match operator
 * notmatch
-* iexact is a case insensitive pattern match
+* iexact is a case insensitive pattern match (ILIKE)
 * notiexact
 * startswith is a prefix match
 * notstartswith
 * endswith is a suffix match
 * notendswith
-* hasall is a JSON attribute specific operator
+* hasall is a JSON and HSTORE attribute specific operator
 * hasany
 * haskey
 * overlap matches any commmon value in a multivalue attribute
@@ -47,11 +47,23 @@ Available operators:
 * notiendswith
 * isnull
 * isnotnull
-* year matches year part of a date like attribute
+* year matches year part of a date like attribute (EXTRACT function)
 * month
 * day
-* func allows to call an arbitrary database funcion, using attribute name and provided value as arguments
 * sfunc allows to call an arbitrary single argument database function, using only attribute name
+* func allows to call an arbitrary database funcion, using attribute name and provided value as arguments
+
+Some operator behavior, like `contains`, depends on column type.
+
+Example ::
+
+    name__iexact=John&categories__sfunc__jsonb_array_length__gt=3
+
+The example above uses the `sfunc` operator which applies the `jsonb_to_int_array` SQL function
+to the `categories` attribute and compares the result with 3.
+
+Two argument functions must return a boolean and are most useful
+when you want to use a special operator that's not supported, so you call it's function instead.
 
 Relation filters
 ****************

@@ -23,7 +23,12 @@ There are few special keys recognized:
 Example ::
 
     {
-      "sum": ["value", "sfunc__date_trunc__created_at"],
+      "sum": {"value": "created_at__sfunc__date_trunc_month"},
       "group_by": "category_id",
       "group_limit": 5,
     }
+
+The example above uses a single argument SQL function called `date_trunc_month` to truncate the date to full month.
+
+Note: because it's only possible to use single argument functions here, the `date_trunc_month` is actually a custom function
+defined as a wrapper to `date_trunc` setting the second argument to `month`.
