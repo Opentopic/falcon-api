@@ -2,6 +2,9 @@ import falcon
 
 
 class AuthMiddleware(object):
+    """
+    Token based authentication that uses two HTTP headers: X-Project-ID and X-Auth-Token.
+    """
     def __init__(self, prefix, tokens):
         self.prefix = prefix
         self.tokens = tokens
@@ -10,8 +13,10 @@ class AuthMiddleware(object):
         """
         :param req: Falcon request
         :type req: falcon.request.Request
+
         :param resp: Falcon response
         :type resp: falcon.response.Response
+
         :raises falcon.HTTPUnauthorized
         """
         if not req.path.startswith(self.prefix):
@@ -34,8 +39,10 @@ class AuthMiddleware(object):
         """
         :param token:
         :type token: string
+
         :param project:
         :type project: string
+
         :return: true if project and token matches against self.tokens
         :rtype: bool
         """
