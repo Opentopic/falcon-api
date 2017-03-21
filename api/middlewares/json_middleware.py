@@ -35,6 +35,7 @@ class JSONTranslator(object):
         Converts request input data from JSON to a dict.
         :param req: Falcon request
         :type req: falcon.request.Request
+
         :param resp: Falcon response
         :type resp: falcon.response.Response
         """
@@ -66,8 +67,10 @@ class JSONTranslator(object):
         Converts request context results to JSON.
         :param req: Falcon request
         :type req: falcon.request.Request
+
         :param resp: Falcon response
         :type resp: falcon.response.Response
+
         :param resource:
         :type resource: api.resources.base.BaseResource
         """

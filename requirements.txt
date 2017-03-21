@@ -1,8 +1,8 @@
-falcon~=1.0.0
+falcon~=1.1.0
 mongoengine~=0.10.6
-SQLAlchemy~=1.0.14
+SQLAlchemy~=1.1.6
 alchemyjsonschema~=0.4.2
 sphinx-rtd-theme==0.1.9
-python-rapidjson==0.0.6
+python-rapidjson>=0.0.6
 elasticsearch-dsl~=2.1.0
 elasticsearch~=2.3.0
