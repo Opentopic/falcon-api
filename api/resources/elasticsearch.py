@@ -382,15 +382,14 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
 
         # use raw data from object_list and avoid unnecessary serialization
         data = object_list.execute()._d_['hits']['hits']
-        serialized = [obj['_source'] for obj in data]
-        result = {
-            'results': serialized,
-            'total': totals.pop('total_count') if 'total_count' in totals else None,
-            'returned': len(serialized),
+        result = [obj['_source'] for obj in data]
+        headers = {
+            'x-api-total': totals.pop('total_count') if 'total_count' in totals else None,
+            'x-api-returned': len(serialized),
         }
-        result.update(totals)
-        resp.set_headers({'x-api-total': result['total'],
-                          'x-api-returned': result['returned']})
+        for name, values in totals.items():
+            headers['x-api-' + name.replace('_', '-')] = values
+        resp.set_headers(headers)
         self.render_response(result, req, resp)
 
     def on_head(self, req, resp):

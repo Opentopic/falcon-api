@@ -30,7 +30,7 @@ class BaseResource(object):
         :param status: HTTP status code
         :type status: str
         """
-        req.context['result'] = result
+        resp.body = result
         resp.status = status
 
     def serialize(self, obj):
@@ -294,14 +294,12 @@ class BaseCollectionResource(BaseResource):
         """
         object_list, totals = self.get_data(req, resp)
 
-        result = {
-            'results': [self.serialize(obj) for obj in object_list],
-            'total': totals.pop('total_count') if 'total_count' in totals else None,
-            'returned': len(object_list)
-        }
-        result.update(totals)
-        resp.set_headers({'x-api-total': result['total'],
-                          'x-api-returned': result['returned']})
+        result = [self.serialize(obj) for obj in object_list]
+        headers = {'x-api-total': totals.pop('total_count') if 'total_count' in totals else None,
+                   'x-api-returned': len(object_list)}
+        for name, values in totals.items():
+            headers['x-api-' + name.replace('_', '-')] = values
+        resp.set_headers(headers)
         self.render_response(result, req, resp)
 
     def on_head(self, req, resp):
@@ -411,11 +409,7 @@ class BaseSingleResource(BaseResource):
         :type resp: falcon.response.Response
         """
         obj = self.get_object(req, resp, kwargs)
-
-        result = {
-            'results': self.serialize(obj),
-        }
-        self.render_response(result, req, resp)
+        self.render_response(self.serialize(obj), req, resp)
 
     def on_head(self, req, resp, *args, **kwargs):
         """

@@ -59,7 +59,7 @@ class CreateResourceTest(unittest.TestCase):
         resp = Response()
         resource.on_put(req=req, resp=resp)
         self.assertEqual(
-            req.context['result'],
+            resp.body,
             {'id': 1, 'name': 'Opentopic'}
         )
 
@@ -86,6 +86,6 @@ class CreateResourceTest(unittest.TestCase):
         resp = Response()
         resource.on_put(req=req, resp=resp)
         self.assertEqual(
-            req.context['result'],
+            resp.body,
             {'errors': {'name': ['Test Error Message']}}
         )

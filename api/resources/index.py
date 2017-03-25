@@ -24,5 +24,5 @@ class IndexResource(object):
         :param resp: Falcon response
         :type resp: falcon.response.Response
         """
-        req.context['result'] = [urljoin(req.uri, route) for route in self.routes]
+        resp.body = [urljoin(req.uri, route) for route in self.routes]
         resp.status = falcon.HTTP_200
