@@ -35,6 +35,7 @@ class JSONTranslator(object):
         Converts request input data from JSON to a dict.
         :param req: Falcon request
         :type req: falcon.request.Request
+
         :param resp: Falcon response
         :type resp: falcon.response.Response
         """
@@ -63,15 +64,14 @@ class JSONTranslator(object):
 
     def process_response(self, req, resp, resource):
         """
-        Converts request context results to JSON.
+        Converts response body to JSON.
         :param req: Falcon request
         :type req: falcon.request.Request
+
         :param resp: Falcon response
         :type resp: falcon.response.Response
+
         :param resource:
         :type resource: api.resources.base.BaseResource
         """
-        if 'result' not in req.context:
-            return
-
-        resp.body = json.dumps(req.context['result'])
+        resp.body = json.dumps(resp.body)

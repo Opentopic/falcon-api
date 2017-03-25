@@ -98,7 +98,7 @@ class UpdateResourceTest(unittest.TestCase):
         resource.on_patch(req, resp)
         self.assertEqual(
             {'pk': 1, 'name': 'OldName', '_saved': True},
-            req.context['result']
+            resp.body
         )
 
     def test_update_params(self):
@@ -118,5 +118,5 @@ class UpdateResourceTest(unittest.TestCase):
         resource.on_patch(req, resp)
         self.assertEqual(
             {'pk': 1, 'name': 'TestNewName', '_saved': True},
-            req.context['result']
+            resp.body
         )

@@ -257,14 +257,16 @@ def test_serialize(model):
     expected = {
         'id': 1,
         'name': 'model',
-        'other_models': {
-            2: {
+        'other_models': [
+            {
+                'id': 2,
                 'name': 'other_model1',
             },
-            3: {
+            {
+                'id': 3,
                 'name': 'other_model2',
             },
-        },
+        ],
     }
     assert alchemy.serialize(model) == expected
 
@@ -274,25 +276,29 @@ def test_serialize_deep(model):
     expected = {
         'id': 1,
         'name': 'model',
-        'other_models': {
-            2: {
+        'other_models': [
+            {
+                'id': 2,
                 'name': 'other_model1',
-                'third_models': {
-                    4: {
+                'third_models': [
+                    {
+                        'id': 4,
                         'name': 'third_model1',
                         'other_model_id': None,
                     },
-                    5: {
+                    {
+                        'id': 5,
                         'name': 'third_model2',
                         'other_model_id': None,
                     },
-                },
+                ],
             },
-            3: {
+            {
+                'id': 3,
                 'name': 'other_model2',
-                'third_models': {}
+                'third_models': [],
             },
-        },
+        ],
     }
     assert alchemy.serialize(model, relations_level=2) == expected
 
@@ -303,14 +309,16 @@ def test_deserialize(model):
     data = {
         'id': 1,
         'name': 'model',
-        'other_models': {
-            2: {
+        'other_models': [
+            {
+                'id': 2,
                 'name': 'other_model1',
             },
-            3: {
+            {
+                'id': 3,
                 'name': 'other_model2',
             },
-        },
+        ],
     }
     expected = {
         'id': 1,

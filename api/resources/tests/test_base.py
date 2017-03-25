@@ -35,4 +35,4 @@ class BaseResourceTest(unittest.TestCase):
         BaseResource.render_response(
             result=result, req=req, resp=resp
         )
-        self.assertEqual(req.context['result'], 'Cognitive Digital Marketing :)')
+        self.assertEqual(resp.body, 'Cognitive Digital Marketing :)')

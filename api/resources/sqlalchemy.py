@@ -5,6 +5,9 @@ from decimal import Decimal
 from enum import Enum
 
 import collections
+from functools import lru_cache
+
+import alchemyjsonschema
 import falcon
 import rapidjson as json
 
@@ -30,7 +33,7 @@ class AlchemyMixin(object):
     PARAM_RELATIONS = 'relations'
     PARAM_RELATIONS_ALL = '_all'
     DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
-    RELATIONS_AS_LIST = False
+    RELATIONS_AS_LIST = True
     IGNORE_UNKNOWN_FILTER = False
 
     _underscore_operators = {
@@ -268,6 +271,11 @@ class AlchemyMixin(object):
         if isinstance(column.type, sqltypes.Float):
             return float(value)
         return value
+
+    @lru_cache(maxsize=None)
+    def get_schema(self, objects_class):
+        factory = alchemyjsonschema.SchemaFactory(alchemyjsonschema.StructuralWalker)
+        return factory(objects_class)
 
     def filter_by(self, query, conditions, order_criteria=None):
         """
@@ -930,17 +938,41 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
             object_list = self.get_object_list(query, limit, offset)
 
-            serialized = [self.serialize(obj, relations_include=relations,
+            result = [self.serialize(obj, relations_include=relations,
                                          relations_ignore=list(getattr(self, 'serialize_ignore', [])))
                           for obj in object_list]
-            result = {
-                'results': serialized,
-                'total': totals['total_count'] if 'total_count' in totals else None,
-                'returned': len(serialized),  # avoid calling object_list.count() which executes the query again
+            headers = {
+                'x-api-total': totals['total_count'] if 'total_count' in totals else None,
+                'x-api-returned': len(serialized),  # avoid calling object_list.count() which executes the query again
             }
-            result.update(totals)
+            for name, values in totals.items():
+                headers['x-api-' + name.replace('_', '-')] = values
 
+        resp.set_headers(headers)
         self.render_response(result, req, resp)
+
+    def on_head(self, req, resp):
+        limit = self.get_param_or_post(req, self.PARAM_LIMIT)
+        offset = self.get_param_or_post(req, self.PARAM_OFFSET)
+        if limit is not None:
+            limit = int(limit)
+        if offset is not None:
+            offset = int(offset)
+        totals = self.get_param_totals(req)
+
+        with self.session_scope(self.db_engine) as db_session:
+            query = self.get_queryset(req, resp, db_session, limit)
+            totals = self.get_total_objects(query, totals)
+
+            object_list = self.get_object_list(query, limit, offset)
+
+            headers = {
+                'x-api-total': totals['total_count'] if 'total_count' in totals else None,
+                'x-api-returned': len(object_list),  # avoid calling object_list.count() which executes the query again
+            }
+
+        resp.set_headers(headers)
+        resp.status = falcon.HTTP_NO_CONTENT
 
     def create(self, req, resp, data, db_session=None):
         """
@@ -1055,12 +1087,18 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         with self.session_scope(self.db_engine) as db_session:
             obj = self.get_object(req, resp, kwargs, db_session=db_session)
 
-            result = {
-                'results': self.serialize(obj, relations_include=relations,
-                                          relations_ignore=list(getattr(self, 'serialize_ignore', []))),
-            }
+            result = self.serialize(obj,
+                                    relations_include=relations,
+                                    relations_ignore=list(getattr(self, 'serialize_ignore', [])))
 
         self.render_response(result, req, resp)
+
+    def on_head(self, req, resp, *args, **kwargs):
+        with self.session_scope(self.db_engine) as db_session:
+            # call get_object to check if it exists
+            self.get_object(req, resp, kwargs, db_session=db_session)
+
+        resp.status = falcon.HTTP_NO_CONTENT
 
     def delete(self, req, resp, obj, db_session=None):
         """

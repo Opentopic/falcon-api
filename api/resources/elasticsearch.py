@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from elasticsearch import NotFoundError
 from elasticsearch_dsl import Mapping, Field, Search, Nested
-from falcon import HTTPBadRequest, HTTPNotFound
+from falcon import HTTPBadRequest, HTTPNotFound, HTTP_NO_CONTENT
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
@@ -246,16 +246,17 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
     Allows to fetch a collection of a resource (GET) and to create new resource in that collection (POST).
     May be extended to allow batch operations (ex. PATCH).
     When fetching a collection (GET), following params are supported:
+
     * limit, offset - for pagination
     * total_count - to calculate total number of items matching filters, without pagination
     * all other params are treated as filters, syntax mimics Django filters,
-      see `ElasticSearchMixin._underscore_operators`
-    User input can be validated by attaching the `falconjsonio.schema.request_schema()` decorator.
+      see :py:const:`ElasticSearchMixin._underscore_operators`
     """
 
     def __init__(self, objects_class, connection, max_limit=None):
         """
         :param objects_class: class represent single element of object lists that's supposed to be returned
+
         :param connection: ElasticSearch connection or alias
         :type connection: elasticsearch.Elasticsearch | str
         """
@@ -363,7 +364,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
             return queryset.update_from_dict({'aggs': aggregates})
         return queryset
 
-    def on_get(self, req, resp):
+    def get_data(self, req, resp):
         limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
         totals = self.get_param_totals(req)
@@ -374,16 +375,34 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         # get totals after objects to reuse main query
         totals = self.get_total_objects(queryset, totals)
 
+        return object_list, totals
+
+    def on_get(self, req, resp):
+        object_list, totals = self.get_data(req, resp)
+
         # use raw data from object_list and avoid unnecessary serialization
         data = object_list.execute()._d_['hits']['hits']
-        serialized = [obj['_source'] for obj in data]
-        result = {
-            'results': serialized,
-            'total': totals.pop('total_count') if 'total_count' in totals else None,
-            'returned': len(serialized)
+        result = [obj['_source'] for obj in data]
+        headers = {
+            'x-api-total': totals.pop('total_count') if 'total_count' in totals else None,
+            'x-api-returned': len(serialized),
         }
-        result.update(totals)
+        for name, values in totals.items():
+            headers['x-api-' + name.replace('_', '-')] = values
+        resp.set_headers(headers)
         self.render_response(result, req, resp)
+
+    def on_head(self, req, resp):
+        object_list, totals = self.get_data(req, resp)
+
+        # use raw data from object_list and avoid unnecessary serialization
+        data = object_list.execute()._d_['hits']['hits']
+        headers = {
+            'x-api-total': totals.pop('total_count') if 'total_count' in totals else None,
+            'x-api-returned': len(data),
+        }
+        resp.set_headers(headers)
+        resp.status = HTTP_NO_CONTENT
 
     def create(self, req, resp, data):
         raise NotImplementedError
@@ -393,7 +412,6 @@ class SingleResource(ElasticSearchMixin, BaseSingleResource):
     """
     Allows to fetch a single resource (GET) and to update (PATCH, PUT) or remove it (DELETE).
     When fetching a resource (GET).
-    User input can be validated by attaching the `falconjsonio.schema.request_schema()` decorator.
     """
 
     def __init__(self, objects_class, connection):

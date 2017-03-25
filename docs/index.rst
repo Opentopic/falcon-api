@@ -1,23 +1,13 @@
-==============================================
-Welcome to Opentopic-falcon api documentation!
-==============================================
+========================
+Falcon API documentation
+========================
 
 .. automodule:: api
 
 .. toctree::
    :maxdepth: 2
 
-   install
+   usage
+   api_resources
+   api_middleware
    tests
-   validation
-   middleware
-   resources
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
-

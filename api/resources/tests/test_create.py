@@ -17,13 +17,9 @@ class FakeObjectClass(dict):
 
 
 class CreateResourceTest(unittest.TestCase):
-    """
-    Testcase for :class:`api.resources.create.CreateResource`
-    """
-
     def test_clean_check_error_raising(self):
         """
-        check if :func:`CreateResource.get_data` return errors dict when `clean_param_name` raise `ParamException`
+        Check if clean function returns errors dict when `clean_param_name` raise `ParamException`
         """
         resource = CollectionResource(objects_class=None)
         env = create_environ(path='/')
@@ -49,9 +45,8 @@ class CreateResourceTest(unittest.TestCase):
 
     def test_on_put_success_result(self):
         """
-        test :func:`CreateResource.on_put` if we will receive correct response
+        Test if we will receive correct response
         """
-
         resource = CollectionResource(objects_class=FakeObjectClass)
         env = create_environ(path='/')
         req = Request(env)
@@ -64,13 +59,13 @@ class CreateResourceTest(unittest.TestCase):
         resp = Response()
         resource.on_put(req=req, resp=resp)
         self.assertEqual(
-            req.context['result'],
+            resp.body,
             {'id': 1, 'name': 'Opentopic'}
         )
 
     def test_on_put_error_result(self):
         """
-        test :func:`CreateResource.on_put` if we will receive correct response
+        Test if we will receive correct response
         """
 
         resource = CollectionResource(objects_class=FakeObjectClass)
@@ -91,6 +86,6 @@ class CreateResourceTest(unittest.TestCase):
         resp = Response()
         resource.on_put(req=req, resp=resp)
         self.assertEqual(
-            req.context['result'],
+            resp.body,
             {'errors': {'name': ['Test Error Message']}}
         )
