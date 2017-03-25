@@ -11,12 +11,3 @@ Falcon API documentation
    api_resources
    api_middleware
    tests
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
-

@@ -5,6 +5,9 @@ from decimal import Decimal
 from enum import Enum
 
 import collections
+from functools import lru_cache
+
+import alchemyjsonschema
 import falcon
 import rapidjson as json
 
@@ -268,6 +271,11 @@ class AlchemyMixin(object):
         if isinstance(column.type, sqltypes.Float):
             return float(value)
         return value
+
+    @lru_cache(maxsize=None)
+    def get_schema(self, objects_class):
+        factory = alchemyjsonschema.SchemaFactory(alchemyjsonschema.StructuralWalker)
+        return factory(objects_class)
 
     def filter_by(self, query, conditions, order_criteria=None):
         """
@@ -940,7 +948,32 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             }
             result.update(totals)
 
+        resp.set_headers({'x-api-total': result['total'],
+                          'x-api-returned': result['returned']})
         self.render_response(result, req, resp)
+
+    def on_head(self, req, resp):
+        limit = self.get_param_or_post(req, self.PARAM_LIMIT)
+        offset = self.get_param_or_post(req, self.PARAM_OFFSET)
+        if limit is not None:
+            limit = int(limit)
+        if offset is not None:
+            offset = int(offset)
+        totals = self.get_param_totals(req)
+
+        with self.session_scope(self.db_engine) as db_session:
+            query = self.get_queryset(req, resp, db_session, limit)
+            totals = self.get_total_objects(query, totals)
+
+            object_list = self.get_object_list(query, limit, offset)
+
+            headers = {
+                'x-api-total': totals['total_count'] if 'total_count' in totals else None,
+                'x-api-returned': len(object_list),  # avoid calling object_list.count() which executes the query again
+            }
+
+        resp.set_headers(headers)
+        resp.status = falcon.HTTP_NO_CONTENT
 
     def create(self, req, resp, data, db_session=None):
         """
@@ -1061,6 +1094,13 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
             }
 
         self.render_response(result, req, resp)
+
+    def on_head(self, req, resp, *args, **kwargs):
+        with self.session_scope(self.db_engine) as db_session:
+            # call get_object to check if it exists
+            self.get_object(req, resp, kwargs, db_session=db_session)
+
+        resp.status = falcon.HTTP_NO_CONTENT
 
     def delete(self, req, resp, obj, db_session=None):
         """
