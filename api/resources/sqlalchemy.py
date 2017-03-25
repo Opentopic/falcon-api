@@ -33,7 +33,7 @@ class AlchemyMixin(object):
     PARAM_RELATIONS = 'relations'
     PARAM_RELATIONS_ALL = '_all'
     DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
-    RELATIONS_AS_LIST = False
+    RELATIONS_AS_LIST = True
     IGNORE_UNKNOWN_FILTER = False
 
     _underscore_operators = {
@@ -938,18 +938,17 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
             object_list = self.get_object_list(query, limit, offset)
 
-            serialized = [self.serialize(obj, relations_include=relations,
+            result = [self.serialize(obj, relations_include=relations,
                                          relations_ignore=list(getattr(self, 'serialize_ignore', [])))
                           for obj in object_list]
-            result = {
-                'results': serialized,
-                'total': totals['total_count'] if 'total_count' in totals else None,
-                'returned': len(serialized),  # avoid calling object_list.count() which executes the query again
+            headers = {
+                'x-api-total': totals['total_count'] if 'total_count' in totals else None,
+                'x-api-returned': len(serialized),  # avoid calling object_list.count() which executes the query again
             }
-            result.update(totals)
+            for name, values in totals.items():
+                headers['x-api-' + name.replace('_', '-')] = values
 
-        resp.set_headers({'x-api-total': result['total'],
-                          'x-api-returned': result['returned']})
+        resp.set_headers(headers)
         self.render_response(result, req, resp)
 
     def on_head(self, req, resp):
@@ -1088,10 +1087,9 @@ class SingleResource(AlchemyMixin, BaseSingleResource):
         with self.session_scope(self.db_engine) as db_session:
             obj = self.get_object(req, resp, kwargs, db_session=db_session)
 
-            result = {
-                'results': self.serialize(obj, relations_include=relations,
-                                          relations_ignore=list(getattr(self, 'serialize_ignore', []))),
-            }
+            result = self.serialize(obj,
+                                    relations_include=relations,
+                                    relations_ignore=list(getattr(self, 'serialize_ignore', [])))
 
         self.render_response(result, req, resp)
 

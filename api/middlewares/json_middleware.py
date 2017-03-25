@@ -64,7 +64,7 @@ class JSONTranslator(object):
 
     def process_response(self, req, resp, resource):
         """
-        Converts request context results to JSON.
+        Converts response body to JSON.
         :param req: Falcon request
         :type req: falcon.request.Request
 
@@ -74,7 +74,4 @@ class JSONTranslator(object):
         :param resource:
         :type resource: api.resources.base.BaseResource
         """
-        if 'result' not in req.context:
-            return
-
-        resp.body = json.dumps(req.context['result'])
+        resp.body = json.dumps(resp.body)

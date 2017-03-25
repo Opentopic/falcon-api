@@ -64,7 +64,7 @@ class HtmlTranslator(object):
             template = self.get_error_template(resp.status)
         else:
             template = self.template_env.get_template(resource.templates[req.method])
-        resp.body = template.render(**self.get_template_vars(req.context, req))
+        resp.body = template.render(**self.get_template_vars({'result': resp.body}, req))
 
     def get_error_template(self, status):
         filename = status.lower().replace(' ', '_') + '.html'

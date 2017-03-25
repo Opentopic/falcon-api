@@ -72,14 +72,9 @@ class MongoCollectionResourceTest(unittest.TestCase):
         resource.get_object_list = Mock(return_value=[1, 2])
         resource.get_total_objects = Mock(return_value={'total_count': 3})
         resource.on_get(req=req, resp=resp)
-        self.assertEqual(
-            req.context['result'],
-            {
-                'results': [1, 2],
-                'total': 3,
-                'returned': 2
-            }
-        )
+        self.assertEqual(resp.body, [1, 2])
+        self.assertEqual(resp.get_header('x-api-total'), 3)
+        self.assertEqual(resp.get_header('x-api-returned'), 2)
 
     def test_on_head(self):
         """
@@ -96,7 +91,7 @@ class MongoCollectionResourceTest(unittest.TestCase):
         resource.get_object_list = Mock(return_value=[1, 2])
         resource.get_total_objects = Mock(return_value={'total_count': 3})
         resource.on_head(req=req, resp=resp)
-        self.assertNotIn('result', req.context)
+        self.assertIsNot(resp.body, [1, 2, 3])
         self.assertEqual(resp.get_header('x-api-total'), 3)
         self.assertEqual(resp.get_header('x-api-returned'), 2)
 
@@ -113,7 +108,7 @@ class MongoCollectionResourceTest(unittest.TestCase):
         resource = mongoengine.CollectionResource(objects_class=FakeObjectList, max_limit=2)
         resource.on_options(req=req, resp=resp)
         self.assertEqual(resp.get_header('Allow'), 'GET, HEAD, OPTIONS, POST, PUT')
-        self.assertEqual(req.context['result'], {
+        self.assertEqual(resp.body, {
             'name': 'FakeObjectList',
             'description': 'Extend list to match interface of List resource',
         })
