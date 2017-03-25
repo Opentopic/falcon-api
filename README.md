@@ -41,11 +41,6 @@ engine = create_engine("sqlite:///mydatabase.db")
 Base = automap_base()
 Base.prepare(engine, reflect=True)
 
-routes = [
-    ('/users', CollectionResource(Base.classes.user, engine)),
-    ('/users/{id}', SingleResource(Base.classes.user, engine)),
-]
-
 app = application = falcon.API(
     middleware=[
         AuthMiddleware('/', {'project-id': 'token-value'}),
@@ -54,9 +49,10 @@ app = application = falcon.API(
     ]
 )
 
-for route, resource in routes:
-    app.add_route(route, resource)
+for name, model in Base.classes.items():
+    app.add_route('/' + name, CollectionResource(model, engine)),
+    app.add_route('/' + name + '/{id}', SingleResource(model, engine)),
 
-app.add_route('/', IndexResource([route for route, resource in routes]))
+app.add_route('/', IndexResource(['/' + name for name in Base.classes.keys()]))
 app.add_error_handler(Exception, JsonError.handle)
 ```
