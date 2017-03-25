@@ -3,12 +3,12 @@ from setuptools import find_packages, setup
 
 setup(
     name='opentopic-falcon-api',
-    version='0.4.10',
-    author='Tomasz Roszko',
-    author_email='tom@opentopic.com',
-    description='Base Library for services api endpoints',
+    version='1.0.0',
+    author='Jan Waś',
+    author_email='jan.was@opentopic.com',
+    description='Falcon API resources for databases',
     url='http://git.opentopic.com/backend/falcon-api',
-    license='GNU GENERAL PUBLIC LICENSE',
+    license='MIT',
     platforms=['OS Independent'],
     packages=find_packages(),
     include_package_data=True,
@@ -16,7 +16,7 @@ setup(
         'Development Status :: 4 - Beta',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
-        'License :: OSI Approved :: BSD License',
+        'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3.x',
     ],
@@ -27,6 +27,7 @@ setup(
     tests_require=[
         'mongoengine==0.10.6',
         'SQLAlchemy>=1.0.12',
+        'alchemyjsonschema>=0.4.2',
         'elasticsearch-dsl==2.1.0',
         'elasticsearch==2.3.0'
     ],

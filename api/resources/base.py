@@ -146,9 +146,9 @@ class BaseResource(object):
 
         resp.set_header('Allow', ', '.join(sorted(allowed_methods)))
 
-        result = {'name': self.objects_class.__class__.__name__}
+        result = {'name': self.objects_class.__name__}
         if self.objects_class.__doc__:
-            result['description'] = self.objects_class.__doc__
+            result['description'] = self.objects_class.__doc__.strip()
         try:
             result['schema'] = self.get_schema(self.objects_class)
         except NotImplementedError:
