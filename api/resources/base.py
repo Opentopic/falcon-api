@@ -294,11 +294,12 @@ class BaseCollectionResource(BaseResource):
         """
         object_list, totals = self.get_data(req, resp)
 
-        result = [self.serialize(obj) for obj in object_list]
-        headers = {'x-api-total': totals.pop('total_count') if 'total_count' in totals else None,
-                   'x-api-returned': len(object_list)}
-        for name, values in totals.items():
-            headers['x-api-' + name.replace('_', '-')] = values
+        result = {'results': [self.serialize(obj) for obj in object_list],
+                  'total': totals.pop('total_count') if 'total_count' in totals else None,
+                  'returned': len(object_list)}
+        result.update(totals)
+        headers = {'x-api-total': result['total'],
+                   'x-api-returned': result['returned']}
         resp.set_headers(headers)
         self.render_response(result, req, resp)
 
