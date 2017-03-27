@@ -9,7 +9,7 @@ Typical usage include:
 * using provided middleware for auth and content type negotiation when creating a Falcon application,
   see :py:mod:`api.middlewares`
 * registering resources, see :py:mod:`api.resources`
-* registering an error handler, see :py:mod:`api.resources.error_handlers.JsonError`
+* registering an error handler, see :py:mod:`api.middlewares.json_middleware.JsonError`
 """
 __author__ = 'Jan Waś (jan.was@opentopic.com)'
 __license__ = 'MIT'

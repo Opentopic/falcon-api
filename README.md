@@ -28,9 +28,8 @@ Below is an example app with:
 ```python
 import falcon
 
-from api.error_handlers import JsonError
 from api.middlewares.auth_middleware import AuthMiddleware
-from api.middlewares.json_middleware import RequireJSON, JSONTranslator
+from api.middlewares.json_middleware import RequireJSON, JSONTranslator, JsonError
 from api.resources.index import IndexResource
 from api.resources.sqlalchemy import CollectionResource, SingleResource
 

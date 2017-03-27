@@ -4,9 +4,6 @@ Resources API
 
 .. automodule:: api
 
-.. automodule:: api.error_handlers
-    :members:
-
 .. automodule:: api.exceptions
     :members:
 
