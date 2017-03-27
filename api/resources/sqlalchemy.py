@@ -938,16 +938,15 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
             object_list = self.get_object_list(query, limit, offset)
 
-            result = [self.serialize(obj, relations_include=relations,
-                                         relations_ignore=list(getattr(self, 'serialize_ignore', [])))
-                          for obj in object_list]
-            headers = {
-                'x-api-total': totals['total_count'] if 'total_count' in totals else None,
-                'x-api-returned': len(serialized),  # avoid calling object_list.count() which executes the query again
-            }
-            for name, values in totals.items():
-                headers['x-api-' + name.replace('_', '-')] = values
+            result = {'results': [self.serialize(obj, relations_include=relations,
+                                                 relations_ignore=list(getattr(self, 'serialize_ignore', [])))
+                                  for obj in object_list],
+                      'total': totals['total_count'] if 'total_count' in totals else None,
+                      'returned': len(object_list)}  # avoid calling object_list.count() which executes the query again
+            result.update(totals)
 
+        headers = {'x-api-total': result['total'],
+                   'x-api-returned': result['returned']}
         resp.set_headers(headers)
         self.render_response(result, req, resp)
 
