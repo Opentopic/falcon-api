@@ -946,7 +946,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                       'returned': len(serialized)}  # avoid calling object_list.count() which executes the query again
             result.update(totals)
 
-        headers = {'x-api-total': result['total'],
+        headers = {'x-api-total': result['total'] if result['total'] is not None else '',
                    'x-api-returned': result['returned']}
         resp.set_headers(headers)
         self.render_response(result, req, resp)
@@ -966,10 +966,8 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
             object_list = self.get_object_list(query, limit, offset)
 
-            headers = {
-                'x-api-total': totals['total_count'] if 'total_count' in totals else None,
-                'x-api-returned': len(object_list),  # avoid calling object_list.count() which executes the query again
-            }
+            headers = {'x-api-total': totals['total_count'] if 'total_count' in totals else '',
+                       'x-api-returned': len(object_list)}
 
         resp.set_headers(headers)
         resp.status = falcon.HTTP_NO_CONTENT
