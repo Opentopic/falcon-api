@@ -386,8 +386,8 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                   'total': totals.pop('total_count') if 'total_count' in totals else None,
                   'returned': len(data)}
         result.update(totals)
-        headers = {'x-api-total': result['total'] if result['total'] is not None else '',
-                   'x-api-returned': result['returned']}
+        headers = {'x-api-total': str(result['total']) if result['total'] is not None else '',
+                   'x-api-returned': str(result['returned'])}
         resp.set_headers(headers)
         self.render_response(result, req, resp)
 
@@ -396,8 +396,8 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
 
         # use raw data from object_list and avoid unnecessary serialization
         data = object_list.execute()._d_['hits']['hits']
-        headers = {'x-api-total': totals.pop('total_count') if 'total_count' in totals else '',
-                   'x-api-returned': len(data)}
+        headers = {'x-api-total': str(totals.pop('total_count')) if 'total_count' in totals else '',
+                   'x-api-returned': str(len(data))}
         resp.set_headers(headers)
         resp.status = HTTP_NO_CONTENT
 

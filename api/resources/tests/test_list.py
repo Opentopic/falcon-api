@@ -73,8 +73,8 @@ class MongoCollectionResourceTest(unittest.TestCase):
         resource.get_total_objects = Mock(return_value={'total_count': 3})
         resource.on_get(req=req, resp=resp)
         self.assertEqual(resp.body, {'results': [1, 2], 'total': 3, 'returned': 2})
-        self.assertEqual(resp.get_header('x-api-total'), 3)
-        self.assertEqual(resp.get_header('x-api-returned'), 2)
+        self.assertEqual(resp.get_header('x-api-total'), '3')
+        self.assertEqual(resp.get_header('x-api-returned'), '2')
 
     def test_on_head(self):
         """
@@ -92,8 +92,8 @@ class MongoCollectionResourceTest(unittest.TestCase):
         resource.get_total_objects = Mock(return_value={'total_count': 3})
         resource.on_head(req=req, resp=resp)
         self.assertIsNot(resp.body, [1, 2, 3])
-        self.assertEqual(resp.get_header('x-api-total'), 3)
-        self.assertEqual(resp.get_header('x-api-returned'), 2)
+        self.assertEqual(resp.get_header('x-api-total'), '3')
+        self.assertEqual(resp.get_header('x-api-returned'), '2')
 
     def test_on_options(self):
         """
