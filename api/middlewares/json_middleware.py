@@ -63,7 +63,7 @@ class JSONTranslator(object):
                                    'JSON was incorrect or not encoded as '
                                    'UTF-8.')
 
-    def process_response(self, req, resp, resource):
+    def process_response(self, req, resp, resource, req_succeeded):
         """
         Converts response body to JSON.
         :param req: Falcon request
@@ -74,8 +74,12 @@ class JSONTranslator(object):
 
         :param resource:
         :type resource: api.resources.base.BaseResource
+
+        :param req_succeeded:
+        :type req_succeeded: bool
         """
-        resp.body = json.dumps(resp.body)
+        if req_succeeded:
+            resp.body = json.dumps(resp.body)
 
 
 class JsonError(Exception):

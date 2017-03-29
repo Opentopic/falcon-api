@@ -314,7 +314,8 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                         break
                 if result_key is None:
                     result_key = 'key_as_string' if 'key_as_string' in bucket else 'key'
-                values[bucket[result_key]] = bucket['doc_count'] if values_key is None else bucket[values_key]['value']
+                values[str(bucket[result_key])] = bucket['doc_count'] if values_key is None else \
+                    bucket[values_key]['value']
             result['total_' + (values_key if values_key else 'count')] = values
         if 'total_count' not in result:
             result['total_count'] = queryset.execute()._d_['hits']['total']

@@ -177,22 +177,29 @@ class AlchemyMixin(object):
             if relation.back_populates:
                 relations_ignore.append(relation.back_populates)
             if relation.direction == MANYTOONE:
-                data[relation.key] = cls.serialize(rel_obj, relations_level=relations_level - 1,
+                data[relation.key] = cls.serialize(rel_obj,
+                                                   relations_level=relations_level - 1,
                                                    relations_ignore=relations_ignore)
             elif not relation.uselist:
-                data.update(cls.serialize(rel_obj, skip_primary_key=True, relations_level=relations_level - 1,
+                data.update(cls.serialize(rel_obj,
+                                          skip_primary_key=True,
+                                          relations_level=relations_level - 1,
                                           relations_ignore=relations_ignore))
             else:
                 if cls.RELATIONS_AS_LIST:
                     data[relation.key] = [
-                        cls.serialize(rel, skip_primary_key=False, relations_level=relations_level - 1,
+                        cls.serialize(rel,
+                                      skip_primary_key=False,
+                                      relations_level=relations_level - 1,
                                       relations_ignore=relations_ignore)
                         for rel in rel_obj if hasattr(rel, 'id')
                     ]
                 else:
                     data[relation.key] = {
-                        str(rel.id): cls.serialize(rel, skip_primary_key=True, relations_level=relations_level - 1,
-                                              relations_ignore=relations_ignore)
+                        str(rel.id): cls.serialize(rel,
+                                                   skip_primary_key=True,
+                                                   relations_level=relations_level - 1,
+                                                   relations_ignore=relations_ignore)
                         for rel in rel_obj if hasattr(rel, 'id')
                     }
         return data
