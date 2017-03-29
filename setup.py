@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='opentopic-falcon-api',
-    version='1.1.2',
+    version='1.1.3',
     author='Jan Waś',
     author_email='jan.was@opentopic.com',
     description='Falcon API resources for databases',
