@@ -192,7 +192,7 @@ class ElasticSearchMixin(object):
                         expression = {op: {column_name: '*' + value, '_expand__to_dot': False}}
                 else:
                     expression = {op: {column_name: value, '_expand__to_dot': False}}
-                if op.startswith('not'):
+                if token.startswith('not'):
                     expression = {'bool': {'must_not': expression}}
                 if nested_name is not None and wrap_nested:
                     return {'nested': {'path': nested_name, 'query': expression}}
