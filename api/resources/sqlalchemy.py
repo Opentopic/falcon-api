@@ -192,7 +192,7 @@ class AlchemyMixin(object):
                                       skip_primary_key=False,
                                       relations_level=relations_level - 1,
                                       relations_ignore=relations_ignore)
-                        for rel in rel_obj if hasattr(rel, 'id')
+                        for rel in rel_obj
                     ]
                 else:
                     data[relation.key] = {
