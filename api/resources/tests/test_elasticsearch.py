@@ -49,10 +49,10 @@ def connection():
      """{"bool": {"should": [{"term": {"name": "value"}},
                              {"term": {"id": 20}}]}}"""),
     ("""{"or": {"other_models__name": "value",
-                "other_models__id": "20"}}""",
+                "other_models__id__notexact": "20"}}""",
      """{"nested": {"path": "other_models",
                     "query": {"bool": {"should": [{"term": {"other_models.name": "value"}},
-                                                  {"term": {"other_models.id": "20"}}]}}}}"""),
+                                                  {"bool": {"must_not": [{"term": {"other_models.id": "20"}}]}}]}}}}"""),  # noqa
     ("""{"or": [{"name": "value",
                   "id": 20},
                 {"name": "value2",

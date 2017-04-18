@@ -281,8 +281,13 @@ class AlchemyMixin(object):
 
     @lru_cache(maxsize=None)
     def get_schema(self, objects_class):
-        factory = alchemyjsonschema.SchemaFactory(alchemyjsonschema.StructuralWalker)
-        return factory(objects_class)
+        extended_mapping = alchemyjsonschema.default_column_to_schema.copy()
+        extended_mapping[sqltypes.ARRAY] = 'array'
+        extended_mapping[sqltypes.JSON] = 'object'
+        extended_mapping[TSVECTOR] = 'array'
+        factory = alchemyjsonschema.SchemaFactory(alchemyjsonschema.StructuralWalker,
+                                                  classifier=alchemyjsonschema.Classifier(extended_mapping))
+        return factory(objects_class, depth=1)
 
     def filter_by(self, query, conditions, order_criteria=None):
         """
