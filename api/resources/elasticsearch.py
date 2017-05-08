@@ -152,7 +152,7 @@ class ElasticSearchMixin(object):
             result = parts[0] if op != 'must_not' else {'bool': {'must_not': parts[0]}}
         return result
 
-    def _parse_tokens(self, obj_class, tokens, value, default_expression=None, wrap_nested=True):
+    def _parse_tokens(self, obj_class, tokens, value, default_expression=None):
         column_name = None
         field = None
         nested_name = None
@@ -194,13 +194,14 @@ class ElasticSearchMixin(object):
                     expression = {op: {column_name: value, '_expand__to_dot': False}}
                 if token.startswith('not'):
                     expression = {'bool': {'must_not': expression}}
-                if nested_name is not None and wrap_nested:
+                if nested_name is not None:
                     return {'nested': {'path': nested_name, 'query': expression}}
                 return expression
             if accumulated and accumulated in mapping\
                     and isinstance(mapping[accumulated], Nested):
                 nested_name = accumulated
                 obj_class = mapping[accumulated]._doc_class
+                # recreate mapping
                 mapping = Mapping(obj_class.__class__.__name__)
                 for name, attr in obj_class.__dict__.items():
                     if isinstance(attr, Field):
@@ -217,7 +218,7 @@ class ElasticSearchMixin(object):
         if column_name is not None and default_expression is not None:
             # if last token was a relation it's just going to be ignored
             expression = default_expression(column_name, value)
-            if nested_name is not None and wrap_nested:
+            if nested_name is not None:
                 return {'nested': {'path': nested_name, 'query': expression}}
             return expression
         return None
@@ -321,19 +322,18 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
             result['total_count'] = queryset.execute()._d_['hits']['total']
         return result
 
-    def _nest_aggregates(self, aggregates, group_by, group_limit):
+    def _nest_aggregates(self, aggregates, group_by):
         for name, expression in group_by:
-            op = 'terms'
-            options = {'field': expression, 'size': group_limit}
             if aggregates:
-                options['order'] = dict.fromkeys(aggregates.keys(), 'desc')
-                aggregates = {name: {op: options, 'aggs': aggregates}}
-            else:
-                aggregates = {name: {op: options}}
+                if 'terms' in expression:
+                    expression['terms']['order'] = dict.fromkeys(aggregates.keys(), 'desc')
+                expression['aggs'] = aggregates
+            aggregates = {name: expression}
         return aggregates
 
     def _build_total_expressions(self, queryset, totals):
         aggregates = {}
+        nested = {}
         group_by = []
         group_limit = 0
         for total in totals:
@@ -353,14 +353,20 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                 if not isinstance(columns, list):
                     columns = [columns]
                 for column in columns:
-                    expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n,
-                                                    wrap_nested=False)
-                    if expression is not None:
-                        if aggregate == self.AGGR_GROUPBY:
-                            group_by.append((column, expression))
-                        else:
-                            aggregates[aggregate] = {aggregate: {'field': expression}}
-        aggregates = self._nest_aggregates(aggregates, group_by, group_limit)
+                    # TODO: check if column is a string and otherwise treat is as a filter
+                    # TODO: merge nested
+                    expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n)
+                    if expression is None:
+                        continue
+                    if isinstance(expression, dict) and list(expression.keys()) == ['nested']:
+                        nested[expression['nested']['path']] = ('nested', {'nested': {'path': expression['nested']['path']}})
+                        expression = expression['nested']['query']
+                    if aggregate == self.AGGR_GROUPBY:
+                        group_by.append((column, {'terms': {'field': expression,
+                                                            'size': group_limit}}))
+                    else:
+                        aggregates[aggregate] = {aggregate: {'field': expression}}
+        aggregates = self._nest_aggregates(aggregates, list(nested.values()) + group_by)
         if aggregates:
             return queryset.update_from_dict({'aggs': aggregates})
         return queryset

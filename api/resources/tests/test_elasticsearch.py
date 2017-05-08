@@ -106,21 +106,46 @@ def query_ordered(request):
 
     ("""[{"count": ["id"]},
          {"group_by": ["name"]}]""",
-     """{"aggs": {"name": {"terms": {"field": "name", "size": 0}}},
+     """{"aggs": {"name": {"terms": {"field": "name",
+                                     "size": 0}}},
          "query": {"match_all": {}}}"""),
 
     ("""[{"sum": ["id"]},
          {"group_by": ["name"]}]""",
-     """{"aggs": {"name": {"terms": {"field": "name", "size": 0, "order": {"sum": "desc"}},
+     """{"aggs": {"name": {"terms": {"field":
+                                     "name", "size": 0,
+                                     "order": {"sum": "desc"}},
                            "aggs": {"sum": {"sum": {"field": "id"}}}}},
          "query": {"match_all": {}}}"""),
 
     ("""[{"sum": ["id"]},
          {"group_by": ["name"]},
          {"group_limit": 5}]""",
-     """{"aggs": {"name": {"terms": {"field": "name", "size": 5, "order": {"sum": "desc"}},
+     """{"aggs": {"name": {"terms": {"field": "name",
+                                     "size": 5,
+                                     "order": {"sum": "desc"}},
                            "aggs": {"sum": {"sum": {"field": "id"}}}}},
          "query": {"match_all": {}}}"""),
+
+    ("""[{"sum": ["id"]},
+         {"group_by": ["other_models__name"]},
+         {"group_limit": 5}]""",
+     """{"aggs": {"other_models": {"nested": {"path": "other_models"},
+                                   "aggs": {"other_models__name": {"terms": {"field": "other_models.name",
+                                                                             "size": 5,
+                                                                             "order": {"sum": "desc"}},
+                                                                   "aggs": {"sum": {"sum": {"field": "id"}}} }} }},
+         "query": {"match_all": {}}}"""),
+
+    ("""[{"max": ["other_models__id"]},
+         {"group_by": [{"other_models__id__gte": 5}, "other_models__name"]}]""",
+     """{"aggs": {"other_models": {"nested": {"path": "other_models"},
+                                   "aggs": {"filtered": {"filter": {"range": {"other_models.id": {"gte": 5}}},
+                                                         "aggs": {"other_models__name": {"terms": {"field": "other_models.name",
+                                                                                                   "size": 0,
+                                                                                                   "order": {"max": "desc"}},
+                                                                                         "aggs": {"max": {"max": {"field": "other_models.id"}}} }} }} }},
+         "query": {"match_all": {}}}"""),  # noqa
 ])
 def query_totals(request):
     return request.param
@@ -167,11 +192,11 @@ def test_totals(connection, query_totals):
     """
     Test `get_object` func
     """
-    conditions, expected = query_totals
-    if isinstance(conditions, str):
-        conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
+    totals, expected = query_totals
+    if isinstance(totals, str):
+        totals = json.loads(totals, object_pairs_hook=OrderedDict)
     if isinstance(expected, str):
         expected = json.loads(expected, object_pairs_hook=OrderedDict)
     c = CollectionResource(objects_class=Model, connection=connection)
-    query_obj = c._build_total_expressions(Search(using=connection).doc_type(Model), conditions)
+    query_obj = c._build_total_expressions(Search(using=connection).doc_type(Model), totals)
     assert query_obj.to_dict() == expected
