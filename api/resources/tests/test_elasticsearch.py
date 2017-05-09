@@ -130,21 +130,21 @@ def query_ordered(request):
     ("""[{"sum": ["id"]},
          {"group_by": ["other_models__name"]},
          {"group_limit": 5}]""",
-     """{"aggs": {"other_models": {"nested": {"path": "other_models"},
-                                   "aggs": {"other_models__name": {"terms": {"field": "other_models.name",
-                                                                             "size": 5,
-                                                                             "order": {"sum": "desc"}},
-                                                                   "aggs": {"sum": {"sum": {"field": "id"}}} }} }},
+     """{"aggs": {"nested": {"nested": {"path": "other_models"},
+                             "aggs": {"other_models__name": {"terms": {"field": "other_models.name",
+                                                                       "size": 5,
+                                                                       "order": {"sum": "desc"}},
+                                                             "aggs": {"sum": {"sum": {"field": "id"}}} }} }},
          "query": {"match_all": {}}}"""),
 
     ("""[{"max": ["other_models__id"]},
          {"group_by": [{"other_models__id__gte": 5}, "other_models__name"]}]""",
-     """{"aggs": {"other_models": {"nested": {"path": "other_models"},
-                                   "aggs": {"filtered": {"filter": {"range": {"other_models.id": {"gte": 5}}},
-                                                         "aggs": {"other_models__name": {"terms": {"field": "other_models.name",
-                                                                                                   "size": 0,
-                                                                                                   "order": {"max": "desc"}},
-                                                                                         "aggs": {"max": {"max": {"field": "other_models.id"}}} }} }} }},
+     """{"aggs": {"nested": {"nested": {"path": "other_models"},
+                             "aggs": {"filtered": {"filter": {"range": {"other_models.id": {"gte": 5}, "_expand__to_dot": false}},
+                                                   "aggs": {"other_models__name": {"terms": {"field": "other_models.name",
+                                                                                             "size": 0,
+                                                                                             "order": {"max": "desc"}},
+                                                                                   "aggs": {"max": {"max": {"field": "other_models.id"}}} }} }} }},
          "query": {"match_all": {}}}"""),  # noqa
 ])
 def query_totals(request):
@@ -169,7 +169,7 @@ def test_filter_by(connection, query_filtered):
     if isinstance(conditions, str):
         conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
     if isinstance(expected, str):
-        expected = json.loads(expected, object_pairs_hook=OrderedDict)
+        expected = json.loads(expected)
     c = CollectionResource(objects_class=Model, connection=connection)
     query_obj = c.filter_by(Search(using=connection).doc_type(Model), conditions)
     assert query_obj.to_dict()['query']['constant_score']['filter'] == expected
@@ -183,7 +183,7 @@ def test_order_by(connection, query_ordered):
     if isinstance(conditions, str):
         conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
     if isinstance(expected, str):
-        expected = json.loads(expected, object_pairs_hook=OrderedDict)
+        expected = json.loads(expected)
     query_obj = Search(using=connection, doc_type=Model).sort(*conditions)
     assert query_obj.to_dict() == expected
 
@@ -196,7 +196,7 @@ def test_totals(connection, query_totals):
     if isinstance(totals, str):
         totals = json.loads(totals, object_pairs_hook=OrderedDict)
     if isinstance(expected, str):
-        expected = json.loads(expected, object_pairs_hook=OrderedDict)
+        expected = json.loads(expected)
     c = CollectionResource(objects_class=Model, connection=connection)
     query_obj = c._build_total_expressions(Search(using=connection).doc_type(Model), totals)
     assert query_obj.to_dict() == expected

@@ -70,10 +70,10 @@ class ElasticSearchMixin(object):
         :type conditions: dict
 
         :param default_op: a default operator to join all filter expressions
-        :type default_op: function
+        :type default_op: str
 
-        :return: expressions list
-        :rtype: list
+        :return: filter expressions
+        :rtype: dict | None
         """
         if default_op is None:
             default_op = 'must'
@@ -323,7 +323,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         return result
 
     def _nest_aggregates(self, aggregates, group_by):
-        for name, expression in group_by:
+        for name, expression in group_by[::-1]:
             if aggregates:
                 if 'terms' in expression:
                     expression['terms']['order'] = dict.fromkeys(aggregates.keys(), 'desc')
@@ -337,13 +337,17 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         group_by = []
         group_limit = 0
         for total in totals:
+            # we need to search for group_limit first
             for aggregate, columns in total.items():
-                if aggregate == 'count':
+                if aggregate != self.AGGR_GROUPLIMIT:
                     continue
-                if aggregate == self.AGGR_GROUPLIMIT:
-                    if not isinstance(columns, int):
-                        raise HTTPBadRequest('Invalid attribute', 'Group limit option requires an integer value')
-                    group_limit = columns
+                if not isinstance(columns, int):
+                    raise HTTPBadRequest('Invalid attribute', 'Group limit option requires an integer value')
+                group_limit = columns
+                break
+        for total in totals:
+            for aggregate, columns in total.items():
+                if aggregate == 'count' or aggregate == self.AGGR_GROUPLIMIT:
                     continue
                 if not columns:
                     if aggregate == self.AGGR_GROUPBY:
@@ -353,17 +357,23 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                 if not isinstance(columns, list):
                     columns = [columns]
                 for column in columns:
-                    # TODO: check if column is a string and otherwise treat is as a filter
-                    # TODO: merge nested
-                    expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n)
+                    # TODO: unfortunately we need to search for group_limit first and then apply it
+                    if isinstance(column, dict):
+                        expression = self._build_filter_expressions(column, 'must')
+                    else:
+                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n)
                     if expression is None:
                         continue
                     if isinstance(expression, dict) and list(expression.keys()) == ['nested']:
-                        nested[expression['nested']['path']] = ('nested', {'nested': {'path': expression['nested']['path']}})
+                        nested[expression['nested']['path']] = ('nested',
+                                                                {'nested': {'path': expression['nested']['path']}})
                         expression = expression['nested']['query']
                     if aggregate == self.AGGR_GROUPBY:
-                        group_by.append((column, {'terms': {'field': expression,
-                                                            'size': group_limit}}))
+                        if isinstance(column, dict):
+                            group_by.append(('filtered', {'filter': expression}))
+                        else:
+                            group_by.append((column, {'terms': {'field': expression,
+                                                                'size': group_limit}}))
                     else:
                         aggregates[aggregate] = {aggregate: {'field': expression}}
         aggregates = self._nest_aggregates(aggregates, list(nested.values()) + group_by)
