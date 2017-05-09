@@ -201,11 +201,7 @@ class ElasticSearchMixin(object):
                     and isinstance(mapping[accumulated], Nested):
                 nested_name = accumulated
                 obj_class = mapping[accumulated]._doc_class
-                # recreate mapping
-                mapping = Mapping(obj_class.__class__.__name__)
-                for name, attr in obj_class.__dict__.items():
-                    if isinstance(attr, Field):
-                        mapping.field(name, attr)
+                mapping = mapping[accumulated]
                 accumulated = ''
             accumulated += ('__' if accumulated else '') + token
             if accumulated in mapping\
