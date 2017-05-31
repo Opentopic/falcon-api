@@ -322,7 +322,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         result = {}
         for key, value in aggs.items():
             result_key, result_value = self.flatten_aggregate(key, value)
-            result[result_key] = result_value
+            result['total_' + result_key] = result_value
         if 'total_count' not in result:
             result['total_count'] = queryset.execute()._d_['hits']['total']
         return result
