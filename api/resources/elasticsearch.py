@@ -340,11 +340,12 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
 
     def _build_total_expressions(self, queryset, totals):
         aggregates = {}
-        nested = {}
+        nested_groups = {}
+        nested_aggs = {}
         group_by = []
         group_limit = 0
+        # we need to search for group_limit first
         for total in totals:
-            # we need to search for group_limit first
             for aggregate, columns in total.items():
                 if aggregate != self.AGGR_GROUPLIMIT:
                     continue
@@ -352,19 +353,16 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                     raise HTTPBadRequest('Invalid attribute', 'Group limit option requires an integer value')
                 group_limit = columns
                 break
+        # next need to find groups for proper nesting, if any
         for total in totals:
             for aggregate, columns in total.items():
-                if aggregate == 'count' or aggregate == self.AGGR_GROUPLIMIT:
+                if aggregate != self.AGGR_GROUPBY:
                     continue
                 if not columns:
-                    if aggregate == self.AGGR_GROUPBY:
-                        raise HTTPBadRequest('Invalid attribute', 'Group by option requires at least one column name')
-                    aggregates[aggregate] = {aggregate: {'field': 'id'}}
-                    continue
+                    raise HTTPBadRequest('Invalid attribute', 'Group by option requires at least one column name')
                 if not isinstance(columns, list):
                     columns = [columns]
                 for column in columns:
-                    # TODO: unfortunately we need to search for group_limit first and then apply it
                     if isinstance(column, dict):
                         expression = self._build_filter_expressions(column, 'must')
                     else:
@@ -372,18 +370,42 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                     if expression is None:
                         continue
                     if isinstance(expression, dict) and list(expression.keys()) == ['nested']:
-                        nested[expression['nested']['path']] = ('nested',
-                                                                {'nested': {'path': expression['nested']['path']}})
+                        nested_groups[expression['nested']['path']] = \
+                            ('nested', {'nested': {'path': expression['nested']['path']}})
                         expression = expression['nested']['query']
-                    if aggregate == self.AGGR_GROUPBY:
-                        if isinstance(column, dict):
-                            group_by.append(('filtered', {'filter': expression}))
-                        else:
-                            group_by.append((column, {'terms': {'field': expression,
-                                                                'size': group_limit}}))
+                    if isinstance(column, dict):
+                        group_by.append(('filtered', {'filter': expression}))
                     else:
-                        aggregates[aggregate] = {aggregate: {'field': expression}}
-        aggregates = self._nest_aggregates(aggregates, list(nested.values()) + group_by)
+                        group_by.append((column, {'terms': {'field': expression,
+                                                            'size': group_limit}}))
+                break
+        # at last process normal aggregates
+        for total in totals:
+            for aggregate, columns in total.items():
+                if aggregate == 'count' or aggregate == self.AGGR_GROUPLIMIT or aggregate == self.AGGR_GROUPBY:
+                    continue
+                if not columns:
+                    aggregates[aggregate] = {aggregate: {'field': 'id'}}
+                    continue
+                if not isinstance(columns, list):
+                    columns = [columns]
+                for column in columns:
+                    if isinstance(column, dict):
+                        expression = self._build_filter_expressions(column, 'must')
+                    else:
+                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n)
+                    if expression is None:
+                        continue
+                    if isinstance(expression, dict) and list(expression.keys()) == ['nested']:
+                        if expression['nested']['path'] not in nested_groups:
+                            nested_aggs[expression['nested']['path']] = \
+                                ('nested', {'nested': {'path': expression['nested']['path']}})
+                        expression = expression['nested']['query']
+                    aggregates[aggregate] = {aggregate: {'field': expression}}
+                    if nested_aggs:
+                        aggregates = self._nest_aggregates(aggregates, list(nested_aggs.values()))
+                        nested_aggs = {}
+        aggregates = self._nest_aggregates(aggregates, list(nested_groups.values()) + group_by)
         if aggregates:
             return queryset.update_from_dict({'aggs': aggregates})
         return queryset
