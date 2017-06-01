@@ -18,7 +18,10 @@ class Model(DocType):
     id = Integer()
     name = String()
 
-    other_models = Nested(doc_class=OtherModel, multi=True)
+    other_models = Nested(doc_class=OtherModel, multi=True, properties={
+        'id': Integer(),
+        'name': String(),
+    })
 
     class Meta:
         index = 'models'

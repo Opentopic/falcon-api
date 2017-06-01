@@ -822,9 +822,10 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             elif len(relations):
                 for relation in relations:
                     query = query.options(subqueryload(relation))
-        if self.PARAM_SEARCH in req.params:
+        search = self.get_param_or_post(req, self.PARAM_SEARCH)
+        if search:
             try:
-                req.params.update(json.loads(req.params.pop(self.PARAM_SEARCH)))
+                req.params.update(json.loads(search))
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
@@ -942,7 +943,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             offset = int(offset)
         totals = self.get_param_totals(req)
         # retrieve that param without removing it so self.get_queryset() so it can also use it
-        relations = self.clean_relations(req.params.get(self.PARAM_RELATIONS, ''))
+        relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, '', pop_params=False))
 
         with self.session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session, limit)

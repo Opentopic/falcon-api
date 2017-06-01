@@ -99,7 +99,7 @@ class BaseResource(object):
                 errors.setdefault(key, []).append(str(e))
         return result, errors
 
-    def get_param_or_post(self, req, name, default=None):
+    def get_param_or_post(self, req, name, default=None, pop_params=True):
         """
         Gets specified param from request params or body.
         If found in params, it's removed.
@@ -112,10 +112,13 @@ class BaseResource(object):
 
         :param default: Default value
 
+        :param pop_params: if True, will pop from req params
+        :type pop_params: bool
+
         :return: param extracted from query params or request body
         """
         if name in req.params:
-            return req.params.pop(name)
+            return req.params.pop(name) if pop_params else req.params.get(name)
         elif 'doc' in req.context:
             return req.context['doc'].get(name, default)
         return default

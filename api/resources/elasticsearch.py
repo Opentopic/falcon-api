@@ -268,9 +268,10 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
     def get_queryset(self, req, resp):
         query = self.get_base_query(req, resp)
 
-        if self.PARAM_SEARCH in req.params:
+        search = self.get_param_or_post(req, self.PARAM_SEARCH)
+        if search:
             try:
-                req.params.update(json.loads(req.params.pop(self.PARAM_SEARCH)))
+                req.params.update(json.loads(search))
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
