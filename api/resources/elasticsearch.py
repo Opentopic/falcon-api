@@ -85,7 +85,10 @@ class ElasticSearchMixin(object):
 
         for arg, value in conditions.items():
             if arg in self._logical_operators:
-                expression = self._parse_logical_op(arg, value, self._logical_operators[arg])
+                expression = self._parse_logical_op(arg,
+                                                    value,
+                                                    self._logical_operators[arg],
+                                                    prevent_expand=prevent_expand)
             else:
                 expression = self._parse_tokens(self.objects_class,
                                                 arg.split('__'),
@@ -140,16 +143,16 @@ class ElasticSearchMixin(object):
             expressions.append({'nested': {'path': longest_path, 'query': {'bool': {op: group}}}})
         return expressions
 
-    def _parse_logical_op(self, arg, value, op):
+    def _parse_logical_op(self, arg, value, op, prevent_expand=True):
         if isinstance(value, dict):
-            return self._build_filter_expressions(value, op)
+            return self._build_filter_expressions(value, op, prevent_expand=prevent_expand)
         if not isinstance(value, list):
             raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
         parts = []
         for subconditions in value:
             if not isinstance(subconditions, dict):
                 raise HTTPBadRequest('Invalid attribute', 'Filter attribute {} is invalid'.format(arg))
-            subexpressions = self._build_filter_expressions(subconditions, 'must')
+            subexpressions = self._build_filter_expressions(subconditions, 'must', prevent_expand=prevent_expand)
             if subexpressions is not None:
                 parts.append(subexpressions)
         result = None
