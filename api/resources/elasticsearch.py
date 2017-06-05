@@ -194,7 +194,8 @@ class ElasticSearchMixin(object):
                 elif op == 'wildcard':
                     if token == 'contains' or token == 'notcontains':
                         if field._multi:
-                            expression = {'terms': {column_name: value}}
+                            op = 'terms'
+                            expression = {op: {column_name: value}}
                         else:
                             expression = {op: {column_name: '*' + value + '*'}}
                     else:
