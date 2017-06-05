@@ -304,12 +304,13 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         values = {}
         values_key = None
         result_key = None
+        agg_name = None
         for bucket in value['buckets']:
             if values_key is None:
                 for bucket_key in bucket.keys():
                     if bucket_key == 'key' or bucket_key == 'key_as_string' or bucket_key == 'doc_count':
                         continue
-                    values_key = bucket_key
+                    values_key = agg_name = bucket_key
                     break
             if result_key is None:
                 result_key = 'key_as_string' if 'key_as_string' in bucket else 'key'
@@ -317,11 +318,11 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                 for subkey, subvalue in bucket[values_key].items():
                     if subkey == 'doc_count':
                         continue
-                    values_key, values[str(bucket[result_key])] = cls.flatten_aggregate(subkey, subvalue)
+                    agg_name, values[str(bucket[result_key])] = cls.flatten_aggregate(subkey, subvalue)
             else:
                 values[str(bucket[result_key])] = bucket['doc_count'] if values_key is None else \
                     bucket[values_key]['value']
-        return (values_key or 'count'), values
+        return (agg_name or 'count'), values
 
     def get_total_objects(self, queryset, totals):
         if not totals:

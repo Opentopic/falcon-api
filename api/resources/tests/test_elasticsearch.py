@@ -208,6 +208,11 @@ def test_totals(connection, query_totals):
 def test_flatten_aggregates():
     value = """
 {"buckets":[
+  {"key_as_string":"2017-02-27T00:00:00.000Z",
+   "key":1490372800000,
+   "doc_count":1,
+   "nested":{"doc_count":15,
+             "avg":{"value":0.3355697842935721}}},
   {"key_as_string":"2017-03-27T00:00:00.000Z",
    "key":1490572800000,
    "doc_count":1,
@@ -217,4 +222,5 @@ def test_flatten_aggregates():
 """
     result_key, result_value = CollectionResource.flatten_aggregate('foo', json.loads(value))
     assert result_key == 'avg'
-    assert result_value == {'2017-03-27T00:00:00.000Z': 0.4355697842935721}
+    assert result_value == {'2017-02-27T00:00:00.000Z': 0.3355697842935721,
+                            '2017-03-27T00:00:00.000Z': 0.4355697842935721}
