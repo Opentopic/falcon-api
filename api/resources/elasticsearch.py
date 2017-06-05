@@ -311,16 +311,16 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                         continue
                     values_key = bucket_key
                     break
+            if result_key is None:
+                result_key = 'key_as_string' if 'key_as_string' in bucket else 'key'
             if values_key in ('nested', 'filtered'):
                 for subkey, subvalue in bucket[values_key].items():
                     if subkey == 'doc_count':
                         continue
-                    return cls.flatten_aggregate(subkey, subvalue)
-                raise Exception('Empty nested or filtered aggregate')
-            if result_key is None:
-                result_key = 'key_as_string' if 'key_as_string' in bucket else 'key'
-            values[str(bucket[result_key])] = bucket['doc_count'] if values_key is None else \
-                bucket[values_key]['value']
+                    values_key, values[str(bucket[result_key])] = cls.flatten_aggregate(subkey, subvalue)
+            else:
+                values[str(bucket[result_key])] = bucket['doc_count'] if values_key is None else \
+                    bucket[values_key]['value']
         return (values_key or 'count'), values
 
     def get_total_objects(self, queryset, totals):

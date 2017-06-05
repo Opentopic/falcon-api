@@ -217,4 +217,4 @@ def test_flatten_aggregates():
 """
     result_key, result_value = CollectionResource.flatten_aggregate('foo', json.loads(value))
     assert result_key == 'avg'
-    assert result_value == 0.4355697842935721
+    assert result_value == {'2017-03-27T00:00:00.000Z': 0.4355697842935721}
