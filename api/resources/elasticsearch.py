@@ -291,13 +291,14 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                 query = query.sort(*order_expressions)
         return self.filter_by(query, req.params)
 
-    def flatten_aggregate(self, key, value):
+    @classmethod
+    def flatten_aggregate(cls, key, value):
         if 'buckets' not in value:
             if key in ('nested', 'filtered'):
                 for subkey, subvalue in value.items():
                     if subkey == 'doc_count':
                         continue
-                    return self.flatten_aggregate(subkey, subvalue)
+                    return cls.flatten_aggregate(subkey, subvalue)
                 raise Exception('Empty nested or filtered aggregate')
             return key, value['value'] if 'value' in value else value
         values = {}
@@ -310,6 +311,12 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                         continue
                     values_key = bucket_key
                     break
+            if values_key in ('nested', 'filtered'):
+                for subkey, subvalue in bucket[values_key].items():
+                    if subkey == 'doc_count':
+                        continue
+                    return cls.flatten_aggregate(subkey, subvalue)
+                raise Exception('Empty nested or filtered aggregate')
             if result_key is None:
                 result_key = 'key_as_string' if 'key_as_string' in bucket else 'key'
             values[str(bucket[result_key])] = bucket['doc_count'] if values_key is None else \

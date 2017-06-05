@@ -203,3 +203,18 @@ def test_totals(connection, query_totals):
     c = CollectionResource(objects_class=Model, connection=connection)
     query_obj = c._build_total_expressions(Search(using=connection).doc_type(Model), totals)
     assert query_obj.to_dict() == expected
+
+
+def test_flatten_aggregates():
+    value = """
+{"buckets":[
+  {"key_as_string":"2017-03-27T00:00:00.000Z",
+   "key":1490572800000,
+   "doc_count":1,
+   "nested":{"doc_count":12,
+             "avg":{"value":0.4355697842935721}}}
+]}
+"""
+    result_key, result_value = CollectionResource.flatten_aggregate('foo', json.loads(value))
+    assert result_key == 'avg'
+    assert result_value == 0.4355697842935721
