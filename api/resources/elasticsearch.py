@@ -64,13 +64,16 @@ class ElasticSearchMixin(object):
             return query
         return query.update_from_dict({'query': {'constant_score': {'filter': expressions}}})
 
-    def _build_filter_expressions(self, conditions, default_op):
+    def _build_filter_expressions(self, conditions, default_op, prevent_expand=True):
         """
         :param conditions: conditions dictionary
         :type conditions: dict
 
         :param default_op: a default operator to join all filter expressions
         :type default_op: str
+
+        :param prevent_expand: if True, will add _expand__to_dot: False
+        :type prevent_expand: bool
 
         :return: filter expressions
         :rtype: dict | None
@@ -84,8 +87,14 @@ class ElasticSearchMixin(object):
             if arg in self._logical_operators:
                 expression = self._parse_logical_op(arg, value, self._logical_operators[arg])
             else:
-                expression = self._parse_tokens(self.objects_class, arg.split('__'), value,
-                                                lambda n, v: {'term': {n: v, '_expand__to_dot': False}})
+                expression = self._parse_tokens(self.objects_class,
+                                                arg.split('__'),
+                                                value,
+                                                lambda n, v: {
+                                                    'term': {n: v, '_expand__to_dot': False}
+                                                    if prevent_expand else {n: v}
+                                                },
+                                                prevent_expand=prevent_expand)
             if expression is not None:
                 expressions.append(expression)
         result = None
@@ -152,7 +161,7 @@ class ElasticSearchMixin(object):
             result = parts[0] if op != 'must_not' else {'bool': {'must_not': parts[0]}}
         return result
 
-    def _parse_tokens(self, obj_class, tokens, value, default_expression=None):
+    def _parse_tokens(self, obj_class, tokens, value, default_expression=None, prevent_expand=True):
         column_name = None
         field = None
         nested_name = None
@@ -176,22 +185,24 @@ class ElasticSearchMixin(object):
                     if not isinstance(value, list):
                         value = [value]
                 if op in ['missing', 'exists']:
-                    expression = {op: {'field': column_name, '_expand__to_dot': False}}
+                    expression = {op: {'field': column_name}}
                 elif op == 'range':
                     if token != 'range':
-                        expression = {op: {column_name: {token: value}, '_expand__to_dot': False}}
+                        expression = {op: {column_name: {token: value}}}
                     else:
-                        expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}, '_expand__to_dot': False}}
+                        expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}}}
                 elif op == 'wildcard':
                     if token == 'contains' or token == 'notcontains':
                         if field._multi:
-                            expression = {'terms': {column_name: value, '_expand__to_dot': False}}
+                            expression = {'terms': {column_name: value}}
                         else:
-                            expression = {op: {column_name: '*' + value + '*', '_expand__to_dot': False}}
+                            expression = {op: {column_name: '*' + value + '*'}}
                     else:
-                        expression = {op: {column_name: '*' + value, '_expand__to_dot': False}}
+                        expression = {op: {column_name: '*' + value}}
                 else:
-                    expression = {op: {column_name: value, '_expand__to_dot': False}}
+                    expression = {op: {column_name: value}}
+                if prevent_expand:
+                    expression[op]['_expand__to_dot'] = False
                 if token.startswith('not'):
                     expression = {'bool': {'must_not': expression}}
                 if nested_name is not None:
@@ -372,14 +383,16 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                     columns = [columns]
                 for column in columns:
                     if isinstance(column, dict):
-                        expression = self._build_filter_expressions(column, 'must')
+                        expression = self._build_filter_expressions(column, 'must', prevent_expand=False)
                     else:
                         expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n)
                     if expression is None:
                         continue
                     if isinstance(expression, dict) and list(expression.keys()) == ['nested']:
-                        nested_groups[expression['nested']['path']] = \
-                            ('nested', {'nested': {'path': expression['nested']['path']}})
+                        if expression['nested']['path'] not in nested_groups:
+                            nested_groups[expression['nested']['path']] = \
+                                ('nested', {'nested': {'path': expression['nested']['path']}})
+                            group_by.append(nested_groups[expression['nested']['path']])
                         expression = expression['nested']['query']
                     if isinstance(column, dict):
                         group_by.append(('filtered', {'filter': expression}))
@@ -399,7 +412,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                     columns = [columns]
                 for column in columns:
                     if isinstance(column, dict):
-                        expression = self._build_filter_expressions(column, 'must')
+                        expression = self._build_filter_expressions(column, 'must', prevent_expand=False)
                     else:
                         expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n)
                     if expression is None:
@@ -413,7 +426,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                     if nested_aggs:
                         aggregates = self._nest_aggregates(aggregates, list(nested_aggs.values()))
                         nested_aggs = {}
-        aggregates = self._nest_aggregates(aggregates, list(nested_groups.values()) + group_by)
+        aggregates = self._nest_aggregates(aggregates, group_by)
         if aggregates:
             return queryset.update_from_dict({'aggs': aggregates})
         return queryset

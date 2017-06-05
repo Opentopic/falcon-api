@@ -143,7 +143,7 @@ def query_ordered(request):
     ("""[{"max": ["other_models__id"]},
          {"group_by": [{"other_models__id__gte": 5}, "other_models__name"]}]""",
      """{"aggs": {"nested": {"nested": {"path": "other_models"},
-                             "aggs": {"filtered": {"filter": {"range": {"other_models.id": {"gte": 5}, "_expand__to_dot": false}},
+                             "aggs": {"filtered": {"filter": {"range": {"other_models.id": {"gte": 5}}},
                                                    "aggs": {"other_models__name": {"terms": {"field": "other_models.name",
                                                                                              "size": 0,
                                                                                              "order": {"max": "desc"}},
