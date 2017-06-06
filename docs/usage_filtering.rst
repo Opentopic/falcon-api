@@ -52,6 +52,7 @@ Available operators:
 * day
 * sfunc allows to call an arbitrary single argument database function, using only attribute name
 * func allows to call an arbitrary database funcion, using attribute name and provided value as arguments
+* efunc allows to call an arbitrary database function, using attribute name and other attribute name
 
 Some operator behavior, like `contains`, depends on column type.
 

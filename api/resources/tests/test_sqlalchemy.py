@@ -129,10 +129,13 @@ JOIN other_table AS other_models_1 ON other_models_1.id = m2m_table_1.other_mode
 ON some_table.id = m2m_table_1.model_id %20
 WHERE other_models_1.name IS NOT NULL"""),
     ("""{"and": {"name__func__first_func__other_func": 20,
-                 "name__func__single_func": 20}}""",
+                 "name__func__single_func": 20,
+                 "name__sfunc__noarg_func": null,
+                 "name__efunc__id__greatest": null}}""",
      """SELECT some_table.id, some_table.name %20
 FROM some_table %20
-WHERE other_func(first_func(some_table.name), ?) AND single_func(some_table.name, ?)"""),
+WHERE other_func(first_func(some_table.name), ?) AND single_func(some_table.name, ?) AND noarg_func(some_table.name) %0A
+AND greatest(some_table.name, some_table.id)"""),
     ("""{"and": {"q": "value2",
                  "q__or": ["value", "value2"],
                  "q__and": ["one", "two", "three"]}}""",

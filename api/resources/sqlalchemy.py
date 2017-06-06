@@ -72,6 +72,7 @@ class AlchemyMixin(object):
         'day': lambda c, x: extract('day', c) == x,
         'func': Function,
         'sfunc': Function,
+        'efunc': Function,
     }
     _logical_operators = {
         'or': or_,
@@ -469,8 +470,12 @@ class AlchemyMixin(object):
                 if op == Function:
                     expression = column_name
                     if len(tokens[index+1:]) > 1:
-                        for func_name in tokens[index+1:-1]:
-                            expression = Function(func_name, expression)
+                        if token == 'efunc':
+                            value = self._parse_tokens(obj_class, tokens[index+1:-1], value, relationships,
+                                                       lambda c, n, v: n)
+                        else:
+                            for func_name in tokens[index+1:-1]:
+                                expression = Function(func_name, expression)
                     if tokens[-1] in self._underscore_operators:
                         expression = self._underscore_operators[tokens[-1]](expression, value)
                     else:
