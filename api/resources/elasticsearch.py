@@ -219,10 +219,13 @@ class ElasticSearchMixin(object):
                 mapping = mapping[accumulated]
                 accumulated = ''
             accumulated += ('__' if accumulated else '') + token
-            if accumulated in mapping\
-                    and not isinstance(mapping[accumulated], Nested):
+            if accumulated in mapping and \
+                    not isinstance(mapping[accumulated], Nested):
                 column_name = ((nested_name + '.') if nested_name else '') + accumulated
                 field = mapping[accumulated]
+                if getattr(field, 'fields', None) is not None and 'raw' in field.fields and \
+                        field.fields['raw'].index == 'not_analyzed':
+                    column_name += '.raw'
         if column_name is None:
             raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, it is expected to be a known '
                                                       'column name'.format('__'.join(tokens)))
