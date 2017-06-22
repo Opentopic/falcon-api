@@ -1021,19 +1021,21 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         if errors:
             result = {'errors': errors}
             status_code = falcon.HTTP_BAD_REQUEST
-        else:
-            try:
-                with self.session_scope(self.db_engine) as db_session:
-                    result = self.create(req, resp, data, db_session=db_session)
-            except (IntegrityError, ProgrammingError) as err:
-                # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
-                # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
-                if isinstance(err, IntegrityError)\
-                        or (len(err.orig.args) > 1 and err.orig.args[1] == self.VIOLATION_UNIQUE):
-                    raise HTTPConflict('Conflict', 'Unique constraint violated')
-                else:
-                    raise
-            status_code = falcon.HTTP_CREATED
+            self.render_response(result, req, resp, status_code)
+            return
+
+        try:
+            with self.session_scope(self.db_engine) as db_session:
+                result = self.create(req, resp, data, db_session=db_session)
+        except (IntegrityError, ProgrammingError) as err:
+            # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
+            # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
+            if isinstance(err, IntegrityError)\
+                    or (len(err.orig.args) > 1 and err.orig.args[1] == self.VIOLATION_UNIQUE):
+                raise HTTPConflict('Conflict', 'Unique constraint violated')
+            else:
+                raise
+        status_code = falcon.HTTP_CREATED
 
         self.render_response(result, req, resp, status_code)
 

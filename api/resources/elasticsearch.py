@@ -164,7 +164,7 @@ class ElasticSearchMixin(object):
             result = parts[0] if op != 'must_not' else {'bool': {'must_not': parts[0]}}
         return result
 
-    def _parse_tokens(self, obj_class, tokens, value, default_expression=None, prevent_expand=True):
+    def _parse_tokens(self, obj_class, tokens, value, default_expression=None, prevent_expand=True, prefer_raw=False):
         column_name = None
         field = None
         nested_name = None
@@ -223,7 +223,7 @@ class ElasticSearchMixin(object):
                     not isinstance(mapping[accumulated], Nested):
                 column_name = ((nested_name + '.') if nested_name else '') + accumulated
                 field = mapping[accumulated]
-                if getattr(field, 'fields', None) is not None and 'raw' in field.fields and \
+                if prefer_raw and getattr(field, 'fields', None) is not None and 'raw' in field.fields and \
                         field.fields['raw'].index == 'not_analyzed':
                     column_name += '.raw'
         if column_name is None:
@@ -392,7 +392,8 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                     if isinstance(column, dict):
                         expression = self._build_filter_expressions(column, 'must', prevent_expand=False)
                     else:
-                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n)
+                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n,
+                                                        prefer_raw=True)
                     if expression is None:
                         continue
                     if isinstance(expression, dict) and list(expression.keys()) == ['nested']:
@@ -421,7 +422,8 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                     if isinstance(column, dict):
                         expression = self._build_filter_expressions(column, 'must', prevent_expand=False)
                     else:
-                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n)
+                        expression = self._parse_tokens(self.objects_class, column.split('__'), None, lambda n, v: n,
+                                                        prefer_raw=True)
                     if expression is None:
                         continue
                     if isinstance(expression, dict) and list(expression.keys()) == ['nested']:
