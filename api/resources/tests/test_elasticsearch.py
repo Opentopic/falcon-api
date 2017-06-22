@@ -11,7 +11,7 @@ from elasticsearch_dsl import Search
 
 class OtherModel(InnerObjectWrapper):
     id = Integer()
-    name = String()
+    name = String(fields={'raw': String(index='not_analyzed')})
 
 
 class Model(DocType):
@@ -20,7 +20,7 @@ class Model(DocType):
 
     other_models = Nested(doc_class=OtherModel, multi=True, properties={
         'id': Integer(),
-        'name': String(),
+        'name': String(fields={'raw': String(index='not_analyzed')}),
     })
 
     class Meta:
@@ -134,7 +134,7 @@ def query_ordered(request):
          {"group_by": ["other_models__name"]},
          {"group_limit": 5}]""",
      """{"aggs": {"nested": {"nested": {"path": "other_models"},
-                             "aggs": {"other_models__name": {"terms": {"field": "other_models.name",
+                             "aggs": {"other_models__name": {"terms": {"field": "other_models.name.raw",
                                                                        "size": 5,
                                                                        "order": {"sum": "desc"}},
                                                              "aggs": {"sum": {"sum": {"field": "id"}}} }} }},
@@ -144,7 +144,7 @@ def query_ordered(request):
          {"group_by": [{"other_models__id__gte": 5}, "other_models__name"]}]""",
      """{"aggs": {"nested": {"nested": {"path": "other_models"},
                              "aggs": {"filtered": {"filter": {"range": {"other_models.id": {"gte": 5}}},
-                                                   "aggs": {"other_models__name": {"terms": {"field": "other_models.name",
+                                                   "aggs": {"other_models__name": {"terms": {"field": "other_models.name.raw",
                                                                                              "size": 0,
                                                                                              "order": {"max": "desc"}},
                                                                                    "aggs": {"max": {"max": {"field": "other_models.id"}}} }} }} }},
