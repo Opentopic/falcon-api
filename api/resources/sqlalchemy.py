@@ -1027,14 +1027,14 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         try:
             with self.session_scope(self.db_engine) as db_session:
                 result = self.create(req, resp, data, db_session=db_session)
-        except (IntegrityError, ProgrammingError) as err:
+        except IntegrityError:
+            raise HTTPConflict('Conflict', 'Unique constraint violated')
+        except ProgrammingError as err:
             # Cases such as unallowed NULL value should have been checked before we got here (e.g. validate against
             # schema using falconjsonio) - therefore assume this is a UNIQUE constraint violation
-            if isinstance(err, IntegrityError)\
-                    or (len(err.orig.args) > 1 and err.orig.args[1] == self.VIOLATION_UNIQUE):
+            if len(err.orig.args) > 1 and err.orig.args[1] == self.VIOLATION_UNIQUE:
                 raise HTTPConflict('Conflict', 'Unique constraint violated')
-            else:
-                raise
+            raise
         status_code = falcon.HTTP_CREATED
 
         self.render_response(result, req, resp, status_code)
