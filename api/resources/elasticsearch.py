@@ -478,7 +478,9 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         resp.status = HTTP_NO_CONTENT
 
     def create(self, req, resp, data):
-        raise NotImplementedError
+        resource = self.objects_class(**data)
+        resource.save(using=self.connection)
+        return self.serialize(resource)
 
 
 class SingleResource(ElasticSearchMixin, BaseSingleResource):
@@ -504,4 +506,10 @@ class SingleResource(ElasticSearchMixin, BaseSingleResource):
         return obj
 
     def update(self, req, resp, data, obj):
-        raise NotImplementedError
+        obj.update(data)
+        return self.serialize(obj)
+
+    def delete(self, req, resp, obj):
+        deleted = obj.delete(using=self.connection)
+        if deleted == 0:
+            raise falcon.HTTPConflict('Conflict', 'Resource found but conditions violated')
