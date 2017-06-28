@@ -175,7 +175,7 @@ def test_filter_by(connection, query_filtered):
         expected = json.loads(expected)
     c = CollectionResource(objects_class=Model, connection=connection)
     query_obj = c.filter_by(Search(using=connection).doc_type(Model), conditions)
-    assert query_obj.to_dict()['query']['constant_score']['filter'] == expected
+    assert query_obj.to_dict()['query'] == expected
 
 
 def test_order_by(connection, query_ordered):

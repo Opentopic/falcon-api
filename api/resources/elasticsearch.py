@@ -62,7 +62,7 @@ class ElasticSearchMixin(object):
         expressions = self._build_filter_expressions(conditions, None)
         if expressions is None:
             return query
-        return query.update_from_dict({'query': {'constant_score': {'filter': expressions}}})
+        return query.update_from_dict({'query': expressions})
 
     def _build_filter_expressions(self, conditions, default_op, prevent_expand=True):
         """
