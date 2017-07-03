@@ -13,4 +13,4 @@ Typical usage include:
 """
 __author__ = 'Jan Waś (jan.was@opentopic.com)'
 __license__ = 'MIT'
-__version__ = '1.1.16'
+__version__ = '1.1.17'

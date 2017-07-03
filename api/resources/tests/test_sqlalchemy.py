@@ -54,6 +54,13 @@ class ThirdModel(Base):
     other_model = relationship('OtherModel', back_populates='third_models')
 
 
+class CompositeModel(Base):
+    __tablename__ = 'composite_table'
+    a_id = Column(Integer, primary_key=True)
+    b_id = Column(Integer, primary_key=True)
+    name = Column(String)
+
+
 @pytest.fixture()
 def engine():
     from sqlalchemy import create_engine
@@ -252,6 +259,17 @@ def test_totals(engine, session, query_totals):
         conditions = json.loads(conditions, object_pairs_hook=OrderedDict)
     c = CollectionResource(objects_class=Model, db_engine=engine)
     stmt, _ = c._build_total_expressions(session.query(Model), conditions)
+    assert str(stmt.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
+
+
+def test_composite(engine, session):
+    """
+    Test `get_object` func
+    """
+    c = CollectionResource(objects_class=CompositeModel, db_engine=engine)
+    stmt, _ = c._build_total_expressions(session.query(CompositeModel), [{"count": None}])
+    expected = """SELECT count(row(composite_table.a_id, composite_table.b_id)) AS count %20
+FROM composite_table ORDER BY 1 DESC"""
     assert str(stmt.compile(engine)) == expected.replace(' %20', ' ').replace(' %0A\n', ' ')
 
 

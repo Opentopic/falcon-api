@@ -896,7 +896,10 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                 if not columns:
                     if aggregate == self.AGGR_GROUPBY:
                         raise HTTPBadRequest('Invalid attribute', 'Group by option requires at least one column name')
-                    aggregates.append(Function(aggregate, *primary_keys).label(aggregate))
+                    if len(primary_keys) > 1:
+                        aggregates.append(Function(aggregate, func.row(*primary_keys)).label(aggregate))
+                    else:
+                        aggregates.append(Function(aggregate, *primary_keys).label(aggregate))
                     continue
                 if not isinstance(columns, list):
                     columns = [columns]
