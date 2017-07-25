@@ -4,8 +4,8 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from elasticsearch import NotFoundError
-from elasticsearch_dsl import Mapping, Field, Search, Nested
-from falcon import HTTPBadRequest, HTTPNotFound, HTTP_NO_CONTENT
+from elasticsearch_dsl import Search, Nested
+from falcon import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTP_NO_CONTENT
 
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
@@ -70,7 +70,7 @@ class ElasticSearchMixin(object):
         :type conditions: dict
 
         :param default_op: a default operator to join all filter expressions
-        :type default_op: str
+        :type default_op: str | None
 
         :param prevent_expand: if True, will add _expand__to_dot: False
         :type prevent_expand: bool
@@ -512,4 +512,4 @@ class SingleResource(ElasticSearchMixin, BaseSingleResource):
     def delete(self, req, resp, obj):
         deleted = obj.delete(using=self.connection)
         if deleted == 0:
-            raise falcon.HTTPConflict('Conflict', 'Resource found but conditions violated')
+            raise HTTPConflict('Conflict', 'Resource found but conditions violated')
