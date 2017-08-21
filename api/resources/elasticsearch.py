@@ -442,12 +442,16 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
 
     def get_data(self, req, resp):
         limit = self.get_param_or_post(req, self.PARAM_LIMIT, self.max_limit)
+        if limit is not None:
+            limit = int(limit)
         offset = self.get_param_or_post(req, self.PARAM_OFFSET, 0)
         totals = self.get_param_totals(req)
 
         queryset = self.get_queryset(req, resp)
 
-        object_list = self.get_object_list(queryset, int(limit) if limit is not None else None, int(offset))
+        object_list = None
+        if limit != 0:
+            object_list = self.get_object_list(queryset, limit, int(offset))
         # get totals after objects to reuse main query
         totals = self.get_total_objects(queryset, totals)
 
@@ -457,7 +461,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         object_list, totals = self.get_data(req, resp)
 
         # use raw data from object_list and avoid unnecessary serialization
-        data = object_list.execute()._d_['hits']['hits']
+        data = object_list.execute()._d_['hits']['hits'] if object_list else []
         result = {'results': [obj['_source'] for obj in data],
                   'total': totals.pop('total_count') if 'total_count' in totals else None,
                   'returned': len(data)}
@@ -471,7 +475,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         object_list, totals = self.get_data(req, resp)
 
         # use raw data from object_list and avoid unnecessary serialization
-        data = object_list.execute()._d_['hits']['hits']
+        data = object_list.execute()._d_['hits']['hits'] if object_list else []
         headers = {'x-api-total': str(totals.pop('total_count')) if 'total_count' in totals else '',
                    'x-api-returned': str(len(data))}
         resp.set_headers(headers)
