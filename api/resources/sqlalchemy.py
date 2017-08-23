@@ -836,20 +836,22 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
+
         order = self.get_param_or_post(req, self.PARAM_ORDER)
-        if order:
-            if isinstance(order, str):
-                if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
-                    try:
-                        order = json.loads(order)
-                    except ValueError:
-                        # not valid json, ignore and try to parse as an ordinary list of attributes
-                        pass
-            if not isinstance(order, list) and not isinstance(order, dict):
-                order = [order]
-            return self.filter_by(query, req.params, order)
-        primary_keys = inspect(self.objects_class).primary_key
-        return self.filter_by(query, req.params).order_by(*primary_keys)
+        if not order:
+            primary_keys = inspect(self.objects_class).primary_key
+            return self.filter_by(query, req.params).order_by(*primary_keys)
+
+        if isinstance(order, str):
+            if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
+                try:
+                    order = json.loads(order)
+                except ValueError:
+                    # not valid json, ignore and try to parse as an ordinary list of attributes
+                    pass
+        if not isinstance(order, list) and not isinstance(order, dict):
+            order = [order]
+        return self.filter_by(query, req.params, order)
 
     def get_total_objects(self, queryset, totals):
         if not totals:

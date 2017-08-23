@@ -58,10 +58,25 @@ class ElasticSearchMixin(object):
             return float(value)
         return value
 
-    def filter_by(self, query, conditions):
+    def filter_by(self, query, conditions, order_criteria=None):
+        """
+        :param query: Search object
+        :type query: elasticsearch.Search
+
+        :param conditions: conditions dictionary
+        :type conditions: dict
+
+        :param order_criteria: optional order criteria
+        :type order_criteria: list
+
+        :return: modified query
+        :rtype: elasticsearch.Search
+        """
         expressions = self._build_filter_expressions(conditions, None)
         if expressions is None:
             return query
+        if order_criteria and '_score' not in order_criteria and '-_score' not in order_criteria:
+            return query.update_from_dict({'query': {'constant_score': {'filter': expressions}}})
         return query.update_from_dict({'query': expressions})
 
     def _build_filter_expressions(self, conditions, default_op, prevent_expand=True):
@@ -293,21 +308,24 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
+
         order = self.get_param_or_post(req, self.PARAM_ORDER)
-        if order:
-            if isinstance(order, str):
-                if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
-                    try:
-                        order = json.loads(order)
-                    except ValueError:
-                        # not valid json, ignore and try to parse as an ordinary list of attributes
-                        pass
-            if not isinstance(order, list) and not isinstance(order, dict):
-                order = [order]
-            order_expressions = self._build_order_expressions(order)
-            if order_expressions:
-                query = query.sort(*order_expressions)
-        return self.filter_by(query, req.params)
+        if not order:
+            return self.filter_by(query, req.params)
+
+        if isinstance(order, str):
+            if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
+                try:
+                    order = json.loads(order)
+                except ValueError:
+                    # not valid json, ignore and try to parse as an ordinary list of attributes
+                    pass
+        if not isinstance(order, list) and not isinstance(order, dict):
+            order = [order]
+        order_expressions = self._build_order_expressions(order)
+        if order_expressions:
+            query = query.sort(*order_expressions)
+        return self.filter_by(query, req.params, order_criteria=order_expressions)
 
     @classmethod
     def flatten_aggregate(cls, key, value):
