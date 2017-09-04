@@ -351,10 +351,14 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
             if result_key is None:
                 result_key = 'key_as_string' if 'key_as_string' in bucket else 'key'
             if values_key in ('nested', 'filtered'):
-                for subkey, subvalue in bucket[values_key].items():
-                    if subkey == 'doc_count':
-                        continue
-                    agg_name, values[str(bucket[result_key])] = cls.flatten_aggregate(subkey, subvalue)
+                if list(bucket[values_key].keys()) == ['doc_count']:
+                    agg_name = 'count'
+                    values[str(bucket[result_key])] = bucket[values_key]['doc_count']
+                else:
+                    for subkey, subvalue in bucket[values_key].items():
+                        if subkey == 'doc_count':
+                            continue
+                        agg_name, values[str(bucket[result_key])] = cls.flatten_aggregate(subkey, subvalue)
             else:
                 values[str(bucket[result_key])] = bucket['doc_count'] if values_key is None else \
                     bucket[values_key]['value']
