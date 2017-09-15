@@ -25,6 +25,14 @@ from sqlalchemy.sql.functions import Function
 from api.resources.base import BaseCollectionResource, BaseSingleResource
 
 
+def _is_int(s):
+    try:
+        int(s)
+    except ValueError:
+        return False
+    return True
+
+
 class AlchemyMixin(object):
     """
     Provides serialize and deserialize methods to convert between JSON and SQLAlchemy datatypes.
@@ -226,45 +234,15 @@ class AlchemyMixin(object):
         if data is None:
             return attributes
 
-        def is_int(s):
-            try:
-                int(s)
-            except ValueError:
-                return False
-            return True
-
         if mapper is None:
             mapper = inspect(self.objects_class)
         for key, value in data.items():
             if key in mapper.relationships:
-                rel_mapper = mapper.relationships[key].mapper
-                # handle a special case, when value is a dict with only all integer keys, then convert it to a list
-                if isinstance(value, dict) and all(is_int(pk) for pk in value.keys()):
-                    replacement = []
-                    for pk, attrs in value.items():
-                        attrs[rel_mapper.primary_key[0].name] = pk
-                        replacement.append(attrs)
-                    value = replacement
-                if isinstance(value, dict):
-                    attributes[key] = self.deserialize(value, rel_mapper)
-                elif isinstance(value, list):
-                    attributes[key] = []
-                    for item in value:
-                        if isinstance(item, dict):
-                            attributes[key].append(self.deserialize(item, rel_mapper))
-                        else:
-                            attributes[key].append(item)
-                else:
-                    attributes[key] = value
+                attributes[key] = self.deserialize_relation(mapper.relationships[key].mapper, value)
             elif key in mapper.columns:
                 attributes[key] = self.deserialize_column(mapper.columns[key], value)
             else:
-                for relation in mapper.relationships:
-                    if relation.direction == MANYTOONE or relation.uselist or key not in relation.mapper.columns:
-                        continue
-                    if relation.key not in attributes:
-                        attributes[relation.key] = {}
-                    attributes[relation.key][key] = self.deserialize_column(relation.mapper.columns[key], value)
+                attributes.update(self.deserialize_onetoone(mapper, key, value))
 
         return attributes
 
@@ -281,6 +259,35 @@ class AlchemyMixin(object):
         if isinstance(column.type, sqltypes.Float):
             return float(value)
         return value
+
+    def deserialize_relation(self, rel_mapper, value):
+        # handle a special case, when value is a dict with only all integer keys, then convert it to a list
+        if isinstance(value, dict) and all(_is_int(pk) for pk in value.keys()):
+            replacement = []
+            for pk, attrs in value.items():
+                attrs[rel_mapper.primary_key[0].name] = pk
+                replacement.append(attrs)
+            value = replacement
+
+        if isinstance(value, dict):
+            return self.deserialize(value, rel_mapper)
+        elif isinstance(value, list):
+            result = []
+            for item in value:
+                if isinstance(item, dict):
+                    result.append(self.deserialize(item, rel_mapper))
+                else:
+                    result.append(item)
+            return result
+        return value
+
+    def deserialize_onetoone(self, mapper, key, value):
+        result = {}
+        for relation in mapper.relationships:
+            if relation.direction == MANYTOONE or relation.uselist or key not in relation.mapper.columns:
+                continue
+            result[key] = self.deserialize_column(relation.mapper.columns[key], value)
+        return result
 
     @lru_cache(maxsize=None)
     def get_schema(self, objects_class):
