@@ -449,6 +449,30 @@ class AlchemyMixin(object):
             result = expressions[0] if default_op != not_ else not_(expressions[0])
         return result
 
+    def _build_expression(self, tokens, index, column_name, value, obj_class, relationships):
+        token = tokens[index]
+        op = self._underscore_operators[token]
+
+        if op != Function:
+            return op(column_name, value)
+
+        expression = column_name
+        if len(tokens[index+1:]) > 1:
+            if token == 'efunc':
+                value = self._parse_tokens(obj_class, tokens[index+1:-1], value, relationships,
+                                           lambda c, n, v: n)
+            else:
+                for func_name in tokens[index+1:-1]:
+                    expression = Function(func_name, expression)
+
+        if tokens[-1] in self._underscore_operators:
+            return self._underscore_operators[tokens[-1]](expression, value)
+
+        if token == 'sfunc':
+            return Function(tokens[-1], expression)
+
+        return Function(tokens[-1], expression, value)
+
     def _parse_tokens(self, obj_class, tokens, value, relationships, default_expression=None):
         column_name = None
         column = None
@@ -463,8 +487,10 @@ class AlchemyMixin(object):
                 if not callable(query_method):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, specific object '
                                                               'can\'t provide a query'.format('__'.join(tokens)))
+
                 return query_method(self=obj_class, column_alias=column_alias, column_name=column_name, value=value,
                                     default_op=or_ if tokens[-1] == 'or' else and_)
+
             if column_name is not None and token in self._underscore_operators:
                 op = self._underscore_operators[token]
                 if op in [operators.between_op, operators.in_op]:
@@ -476,29 +502,15 @@ class AlchemyMixin(object):
                         value = list(map(lambda x: self.deserialize_column(column, x), value))
                     else:
                         value = self.deserialize_column(column, value)
-                if op == Function:
-                    expression = column_name
-                    if len(tokens[index+1:]) > 1:
-                        if token == 'efunc':
-                            value = self._parse_tokens(obj_class, tokens[index+1:-1], value, relationships,
-                                                       lambda c, n, v: n)
-                        else:
-                            for func_name in tokens[index+1:-1]:
-                                expression = Function(func_name, expression)
-                    if tokens[-1] in self._underscore_operators:
-                        expression = self._underscore_operators[tokens[-1]](expression, value)
-                    else:
-                        if token != 'sfunc':
-                            expression = Function(tokens[-1], expression, value)
-                        else:
-                            expression = Function(tokens[-1], expression)
-                else:
-                    expression = op(column_name, value)
+
+                expression = self._build_expression(tokens, index, column_name, value, obj_class, relationships)
+
                 if token == 'isnull':
                     join_is_outer = True
                 if join_chain:
                     relationships['join_chains'].append((join_chain, join_chain_ext, join_is_outer))
                 return expression
+
             if token in mapper.relationships:
                 # follow the relation and change current obj_class and mapper
                 obj_class = mapper.relationships[token].mapper.class_
@@ -508,20 +520,25 @@ class AlchemyMixin(object):
                 join_chain.append(token)
                 join_chain_ext.append((column_alias, token))
                 continue
+
             if token not in mapper.column_attrs:
                 if self.IGNORE_UNKNOWN_FILTER:
                     return None
                 # if token is not an op or relation it has to be a valid column
                 raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected '
                                                           'to be a known column name'.format('__'.join(tokens), token))
+
             column_name = getattr(column_alias, token)
             """:type column: sqlalchemy.schema.Column"""
             column = mapper.columns[token]
+
         if join_chain:
             relationships['join_chains'].append((join_chain, join_chain_ext, join_is_outer))
+
         if column_name is not None and default_expression is not None:
             # if last token was a relation it's just going to be ignored
             return default_expression(column, column_name, value)
+
         return None
 
     @staticmethod
