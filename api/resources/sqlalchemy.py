@@ -632,8 +632,8 @@ class AlchemyMixin(object):
             return [relations]
         return relations
 
-    @staticmethod
-    def save_resource(obj, data, db_session):
+    @classmethod
+    def save_resource(cls, obj, data, db_session):
         """
         Extracts relation dicts from data, saves them and then updates the main object.
 
@@ -652,9 +652,17 @@ class AlchemyMixin(object):
         db_session.autoflush = False
         mapper = inspect(obj).mapper
         for key, value in data.items():
-            if key not in mapper.relationships and getattr(obj, key) != value:
-                setattr(obj, key, value)
+            if key in mapper.relationships or getattr(obj, key) == value:
+                continue
+            setattr(obj, key, value)
         db_session.add(obj)
+        cls.save_resource_relations(obj, data, db_session)
+        db_session.autoflush = autoflush
+        return obj
+
+    @classmethod
+    def save_resource_relations(cls, obj, data, db_session):
+        mapper = inspect(obj).mapper
         for key, value in data.items():
             if key not in mapper.relationships:
                 continue
@@ -667,10 +675,10 @@ class AlchemyMixin(object):
                 for item in value:
                     if isinstance(item, dict):
                         if pk in item and item[pk] in reindexed:
-                            AlchemyMixin.save_resource(objects[reindexed[item[pk]]], item, db_session)
+                            cls.save_resource(objects[reindexed[item[pk]]], item, db_session)
                             reindexed.pop(item[pk])
                         else:
-                            objects.append(AlchemyMixin.update_or_create(db_session, related_mapper, item))
+                            objects.append(cls.update_or_create(db_session, related_mapper, item))
                     else:
                         if item in reindexed:
                             reindexed.pop(item)
@@ -685,16 +693,14 @@ class AlchemyMixin(object):
                 rel_obj = getattr(obj, key)
                 if isinstance(value, dict):
                     relationship = mapper.relationships[key]
-                    if (relationship.direction == MANYTOONE or not relationship.uselist)\
+                    if (relationship.direction == MANYTOONE or not relationship.uselist) \
                             and (pk not in value or rel_obj is None):
-                        setattr(obj, key, AlchemyMixin.update_or_create(db_session, related_mapper, value))
+                        setattr(obj, key, cls.update_or_create(db_session, related_mapper, value))
                     else:
-                        AlchemyMixin.save_resource(rel_obj, value, db_session)
+                        cls.save_resource(rel_obj, value, db_session)
                 elif rel_obj is None or getattr(rel_obj, pk) != value:
                     expression = related_mapper.primary_key[0].__eq__(value)
                     setattr(obj, key, db_session.query(related_mapper.class_).filter(expression).first())
-        db_session.autoflush = autoflush
-        return obj
 
     @staticmethod
     def update_or_create(db_session, mapper, attributes):
