@@ -9,7 +9,10 @@ from functools import lru_cache
 
 import alchemyjsonschema
 import falcon
-import ujson as json
+try:
+    import ujson as json
+except ImportError:
+    import json
 
 from falcon import HTTPConflict, HTTPBadRequest, HTTPNotFound
 from sqlalchemy import inspect

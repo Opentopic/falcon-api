@@ -1,5 +1,8 @@
 import copy
-import ujson as json
+try:
+    import ujson as json
+except ImportError:
+    import json
 from datetime import datetime, time
 from decimal import Decimal
 

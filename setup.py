@@ -22,7 +22,6 @@ setup(
     ],
     install_requires=[
         'falcon>=1.0.0',
-        'ujson>=1.35',
     ],
     tests_require=[
         'mongoengine==0.10.6',
