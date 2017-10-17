@@ -702,8 +702,8 @@ class AlchemyMixin(object):
                     expression = related_mapper.primary_key[0].__eq__(value)
                     setattr(obj, key, db_session.query(related_mapper.class_).filter(expression).first())
 
-    @staticmethod
-    def update_or_create(db_session, mapper, attributes):
+    @classmethod
+    def update_or_create(cls, db_session, mapper, attributes):
         """
         Updated the record if attributes contain the primary key value(s) and creates it if they don't.
 
@@ -728,7 +728,7 @@ class AlchemyMixin(object):
         else:
             obj = mapper.class_()
         if attributes:
-            return AlchemyMixin.save_resource(obj, attributes, db_session)
+            return cls.save_resource(obj, attributes, db_session)
         return obj
 
     @staticmethod
