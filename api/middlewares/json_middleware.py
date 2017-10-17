@@ -1,4 +1,4 @@
-import rapidjson as json
+import ujson as json
 import falcon
 import logging
 

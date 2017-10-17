@@ -1,5 +1,5 @@
 import copy
-import rapidjson as json
+import ujson as json
 from datetime import datetime, time
 from decimal import Decimal
 

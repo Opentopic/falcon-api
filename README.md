@@ -1,6 +1,8 @@
 Falcon API
 ==========
 
+[![Build Status](https://travis-ci.org/Opentopic/falcon-api.svg?branch=master)](https://travis-ci.org/Opentopic/falcon-api)
+
 Falcon API resources for databases. See the [full documentation](http://falcon-api.readthedocs.io).
 
 ## Installation
