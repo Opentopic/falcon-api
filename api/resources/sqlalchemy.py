@@ -836,6 +836,35 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             self.__request_schemas__ = {}
         self.__request_schemas__['POST'] = AlchemyMixin.get_default_schema(objects_class, 'POST')
 
+    def get_eager_queryset(self, req, resp, db_session=None, limit=None):
+        """
+        Return a default query with eager options set if any relations has been requested.
+
+        :param req: Falcon request
+        :type req: falcon.request.Request
+
+        :param resp: Falcon response
+        :type resp: falcon.response.Response
+
+        :param db_session: SQLAlchemy session
+        :type db_session: sqlalchemy.orm.session.Session
+
+        :param limit: max number of records fetched
+        :type limit: int | None
+
+        :return: a query from `object_class`
+        """
+        query = db_session.query(self.objects_class)
+        relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
+        if self.eager_limit is not None and (limit is None or limit <= self.eager_limit):
+            return query
+        if relations is None:
+            query = query.options(subqueryload('*'))
+        elif len(relations):
+            for relation in relations:
+                query = query.options(subqueryload(relation))
+        return query
+
     def get_queryset(self, req, resp, db_session=None, limit=None):
         """
         Return a query object used to fetch data.
@@ -854,14 +883,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
         :return: a query from `object_class`
         """
-        query = db_session.query(self.objects_class)
-        relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, ''))
-        if self.eager_limit is None or (limit is not None and limit > self.eager_limit):
-            if relations is None:
-                query = query.options(subqueryload('*'))
-            elif len(relations):
-                for relation in relations:
-                    query = query.options(subqueryload(relation))
+        query = self.get_eager_queryset(req, resp, db_session, limit)
         search = self.get_param_or_post(req, self.PARAM_SEARCH)
         if search:
             try:
