@@ -887,6 +887,11 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         conditions = {}
         if 'doc' in req.context:
             conditions = dict(req.context['doc'])
+            # ignore any special params except SEARCH and ORDER
+            for param in [self.PARAM_LIMIT, self.PARAM_OFFSET, self.PARAM_TOTAL_COUNT, self.PARAM_TOTALS,
+                          self.PARAM_TEXT_QUERY, self.PARAM_RELATIONS]:
+                conditions.pop(param, None)
+
         conditions.update(req.params)
         if 'search' in conditions:
             search = conditions.pop('search')
