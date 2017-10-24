@@ -883,24 +883,23 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
         :return: a query from `object_class`
         """
-        search = self.get_param_or_post(req, self.PARAM_SEARCH)
-        if search:
+        query = self.get_eager_queryset(req, resp, db_session, limit)
+        conditions = {}
+        if 'doc' in req.context:
+            conditions = dict(req.context['doc'])
+        conditions.update(req.params)
+        if 'search' in conditions:
+            search = conditions.pop('search')
             try:
                 req.params.update(json.loads(search) if isinstance(search, str) else search)
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
 
-        query = self.get_eager_queryset(req, resp, db_session, limit)
-        filters = {}
-        if 'doc' in req.context:
-            filters = req.context['doc']
-        filters.update(req.params)
-
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if not order:
             primary_keys = inspect(self.objects_class).primary_key
-            return self.filter_by(query, filters).order_by(*primary_keys)
+            return self.filter_by(query, conditions).order_by(*primary_keys)
 
         if isinstance(order, str):
             if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
@@ -911,7 +910,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                     pass
         if not isinstance(order, list) and not isinstance(order, dict):
             order = [order]
-        return self.filter_by(query, filters, order)
+        return self.filter_by(query, conditions, order)
 
     def get_total_objects(self, queryset, totals):
         if not totals:

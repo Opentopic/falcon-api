@@ -302,23 +302,22 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                       doc_type=self.objects_class)
 
     def get_queryset(self, req, resp):
-        search = self.get_param_or_post(req, self.PARAM_SEARCH)
-        if search:
+        query = self.get_base_query(req, resp)
+        conditions = {}
+        if 'doc' in req.context:
+            conditions = dict(req.context['doc'])
+        conditions.update(req.params)
+        if 'search' in conditions:
+            search = conditions.pop('search')
             try:
-                req.params.update(json.loads(search) if isinstance(search, str) else search)
+                conditions.update(json.loads(search) if isinstance(search, str) else search)
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
 
-        query = self.get_base_query(req, resp)
-        filters = {}
-        if 'doc' in req.context:
-            filters = req.context['doc']
-        filters.update(req.params)
-
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if not order:
-            return self.filter_by(query, filters)
+            return self.filter_by(query, conditions)
 
         if isinstance(order, str):
             if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
@@ -332,7 +331,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
         order_expressions = self._build_order_expressions(order)
         if order_expressions:
             query = query.sort(*order_expressions)
-        return self.filter_by(query, filters, order_criteria=order_expressions)
+        return self.filter_by(query, conditions, order_criteria=order_expressions)
 
     @classmethod
     def flatten_aggregate(cls, key, value):
