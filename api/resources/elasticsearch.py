@@ -311,8 +311,8 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                           self.PARAM_TEXT_QUERY]:
                 conditions.pop(param, None)
         conditions.update(req.params)
-        if 'search' in conditions:
-            search = conditions.pop('search')
+        if self.PARAM_SEARCH in conditions:
+            search = conditions.pop(self.PARAM_SEARCH)
             try:
                 conditions.update(json.loads(search) if isinstance(search, str) else search)
             except ValueError:

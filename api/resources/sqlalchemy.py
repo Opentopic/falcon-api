@@ -893,10 +893,10 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                 conditions.pop(param, None)
 
         conditions.update(req.params)
-        if 'search' in conditions:
-            search = conditions.pop('search')
+        if self.PARAM_SEARCH in conditions:
+            search = conditions.pop(self.PARAM_SEARCH)
             try:
-                req.params.update(json.loads(search) if isinstance(search, str) else search)
+                conditions.update(json.loads(search) if isinstance(search, str) else search)
             except ValueError:
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
