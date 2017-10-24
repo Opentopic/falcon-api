@@ -315,7 +315,7 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
 
-        order = self.get_param_or_post(req, self.PARAM_ORDER)
+        order = conditions.pop(self.PARAM_ORDER, None)
         if not order:
             return self.filter_by(query, conditions)
 

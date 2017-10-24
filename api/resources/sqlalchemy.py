@@ -896,7 +896,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
 
-        order = self.get_param_or_post(req, self.PARAM_ORDER)
+        order = conditions.pop(self.PARAM_ORDER, None)
         if not order:
             primary_keys = inspect(self.objects_class).primary_key
             return self.filter_by(query, conditions).order_by(*primary_keys)
