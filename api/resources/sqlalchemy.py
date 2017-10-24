@@ -883,7 +883,6 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
 
         :return: a query from `object_class`
         """
-        query = self.get_eager_queryset(req, resp, db_session, limit)
         search = self.get_param_or_post(req, self.PARAM_SEARCH)
         if search:
             try:
@@ -892,10 +891,16 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                 raise HTTPBadRequest('Invalid attribute',
                                      'Value of {} filter attribute is invalid'.format(self.PARAM_SEARCH))
 
+        query = self.get_eager_queryset(req, resp, db_session, limit)
+        filters = {}
+        if 'doc' in req.context:
+            filters = req.context['doc']
+        filters.update(req.params)
+
         order = self.get_param_or_post(req, self.PARAM_ORDER)
         if not order:
             primary_keys = inspect(self.objects_class).primary_key
-            return self.filter_by(query, req.params).order_by(*primary_keys)
+            return self.filter_by(query, filters).order_by(*primary_keys)
 
         if isinstance(order, str):
             if (order[0] == '{' and order[-1] == '}') or (order[0] == '[' and order[-1] == ']'):
@@ -906,7 +911,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                     pass
         if not isinstance(order, list) and not isinstance(order, dict):
             order = [order]
-        return self.filter_by(query, req.params, order)
+        return self.filter_by(query, filters, order)
 
     def get_total_objects(self, queryset, totals):
         if not totals:

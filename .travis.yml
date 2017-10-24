@@ -1,3 +1,6 @@
+cache:
+  directories:
+  - "$HOME/.cache/pip"
 language: python
 python:
   - "3.4"
@@ -6,5 +9,8 @@ python:
   - "3.7-dev" # 3.7 development branch
   - "nightly" # currently points to 3.7-dev
   - "pypy3"
+  - "pypy-5.4"
+before_install:
+  - pip install --upgrade pip
 install: "pip install -r requirements.txt"
 script: pytest

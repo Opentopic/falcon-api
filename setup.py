@@ -1,13 +1,15 @@
-from setuptools import find_packages, setup
+#!/usr/bin/env python
 
+from setuptools import setup, find_packages
 
 setup(
     name='opentopic-falcon-api',
-    version='1.1.26',
+    version='1.1.27',
     author='Jan Waś',
     author_email='jan.was@opentopic.com',
     description='Falcon API resources for databases',
     url='http://git.opentopic.com/backend/falcon-api',
+    zip_safe=True,
     license='MIT',
     platforms=['OS Independent'],
     packages=find_packages(),
