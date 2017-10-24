@@ -301,14 +301,16 @@ class CollectionResource(ElasticSearchMixin, BaseCollectionResource):
                       index=self.objects_class._doc_type.index,
                       doc_type=self.objects_class)
 
+    def get_special_params(self):
+        return [self.PARAM_LIMIT, self.PARAM_OFFSET, self.PARAM_TOTAL_COUNT, self.PARAM_TOTALS, self.PARAM_TEXT_QUERY]
+
     def get_queryset(self, req, resp):
         query = self.get_base_query(req, resp)
         conditions = {}
         if 'doc' in req.context:
             conditions = dict(req.context['doc'])
             # ignore any special params except SEARCH and ORDER
-            for param in [self.PARAM_LIMIT, self.PARAM_OFFSET, self.PARAM_TOTAL_COUNT, self.PARAM_TOTALS,
-                          self.PARAM_TEXT_QUERY]:
+            for param in self.get_special_params():
                 conditions.pop(param, None)
         conditions.update(req.params)
         if self.PARAM_SEARCH in conditions:

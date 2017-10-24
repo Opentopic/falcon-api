@@ -865,6 +865,10 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                 query = query.options(subqueryload(relation))
         return query
 
+    def get_special_params(self):
+        return [self.PARAM_LIMIT, self.PARAM_OFFSET, self.PARAM_TOTAL_COUNT, self.PARAM_TOTALS, self.PARAM_TEXT_QUERY,
+                self.PARAM_RELATIONS]
+
     def get_queryset(self, req, resp, db_session=None, limit=None):
         """
         Return a query object used to fetch data.
@@ -888,8 +892,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
         if 'doc' in req.context:
             conditions = dict(req.context['doc'])
             # ignore any special params except SEARCH and ORDER
-            for param in [self.PARAM_LIMIT, self.PARAM_OFFSET, self.PARAM_TOTAL_COUNT, self.PARAM_TOTALS,
-                          self.PARAM_TEXT_QUERY, self.PARAM_RELATIONS]:
+            for param in self.get_special_params():
                 conditions.pop(param, None)
 
         conditions.update(req.params)
