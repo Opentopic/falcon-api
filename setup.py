@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='opentopic-falcon-api',
-    version='1.1.28',
+    version='1.1.29',
     author='Jan Waś',
     author_email='jan.was@opentopic.com',
     description='Falcon API resources for databases',

@@ -5,9 +5,10 @@ class AuthMiddleware(object):
     """
     Token based authentication that uses two HTTP headers: X-Project-ID and X-Auth-Token.
     """
-    def __init__(self, prefix, tokens):
+    def __init__(self, prefix, tokens, noauth_routes=None):
         self.prefix = prefix
         self.tokens = tokens
+        self.noauth_routes = noauth_routes or []
 
     def process_request(self, req, resp):
         """
@@ -19,7 +20,7 @@ class AuthMiddleware(object):
 
         :raises falcon.HTTPUnauthorized
         """
-        if not req.path.startswith(self.prefix):
+        if (self.prefix and not req.path.startswith(self.prefix)) or req.path in self.noauth_routes:
             return
 
         token = req.get_header('X-Auth-Token')
