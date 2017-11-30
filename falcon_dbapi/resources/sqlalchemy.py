@@ -112,7 +112,7 @@ class AlchemyMixin(object):
         try:
             yield db_session
             db_session.commit()
-        except:
+        except Exception:
             db_session.rollback()
             raise
         finally:
