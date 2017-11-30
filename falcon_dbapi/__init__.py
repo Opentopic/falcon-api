@@ -14,4 +14,4 @@ Typical usage include:
 __title__ = 'falcon_dbapi'
 __author__ = 'Jan Waś (jan.was@opentopic.com)'
 __license__ = 'MIT'
-__version__ = '1.1.29'
+__version__ = '1.2.0'
