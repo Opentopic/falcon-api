@@ -3,7 +3,7 @@ import unittest
 from falcon import Request, Response
 from falcon.testing import create_environ
 
-from api.resources.mongoengine import SingleResource
+from falcon_dbapi.resources.mongoengine import SingleResource
 
 
 class FakeObject(object):
@@ -41,7 +41,7 @@ def fake_serialize(obj):
 
 class UpdateResourceTest(unittest.TestCase):
     """
-    Testcase for :class:`api.resources.create.CreateResource`
+    Testcase for :class:`falcon_dbapi.resources.create.CreateResource`
     """
 
     def test_update_withtout_pk(self):

@@ -63,10 +63,10 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-import api
+import falcon_db as api
 import datetime
 
-project = 'Falcon API'
+project = 'Falcon DB API'
 copyright = '{year}, Opentopic Inc.'.format(year=datetime.date.today().year)
 author = api.__author__
 

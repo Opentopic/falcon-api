@@ -13,7 +13,7 @@ To request relations data simply pass a comma separated list of relations in the
 To fetch all relations, use the `_all` value.
 
 Note: this only allows fetching directly related objects. For deeper serialisation,
-override the :py:meth:`api.resources.base.BaseResource.serialize()` method.
+override the :py:meth:`falcon_dbapi.resources.base.BaseResource.serialize()` method.
 
 .. code-block:: python
 

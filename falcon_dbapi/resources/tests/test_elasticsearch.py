@@ -3,7 +3,7 @@ from collections import OrderedDict
 
 import pytest
 
-from api.resources.elasticsearch import CollectionResource, ElasticSearchMixin
+from falcon_dbapi.resources.elasticsearch import CollectionResource, ElasticSearchMixin
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import DocType, InnerObjectWrapper, String, Integer, Nested
 from elasticsearch_dsl import Search

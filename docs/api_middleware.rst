@@ -2,13 +2,13 @@
 Middleware API
 ==============
 
-.. automodule:: api.middlewares
+.. automodule:: falcon_dbapi.middlewares
 
-.. automodule:: api.middlewares.auth_middleware
+.. automodule:: falcon_dbapi.middlewares.auth_middleware
     :members:
 
-.. automodule:: api.middlewares.json_middleware
+.. automodule:: falcon_dbapi.middlewares.json_middleware
     :members:
 
-.. automodule:: api.middlewares.html_middleware
+.. automodule:: falcon_dbapi.middlewares.html_middleware
     :members:

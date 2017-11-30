@@ -25,7 +25,7 @@ from sqlalchemy.sql import sqltypes, operators, extract, func
 from sqlalchemy.sql.expression import and_, or_, not_, desc, select
 from sqlalchemy.sql.functions import Function
 
-from api.resources.base import BaseCollectionResource, BaseSingleResource
+from falcon_dbapi.resources.base import BaseCollectionResource, BaseSingleResource
 
 
 def _is_int(s):

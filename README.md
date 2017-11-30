@@ -10,7 +10,7 @@ Falcon API resources for databases. See the [full documentation](http://falcon-a
 Run:
 
 ```bash
-pip install falcon-api
+pip install falcon_dbapi
 ```
 
 Packages required for specific databases:
@@ -30,10 +30,10 @@ Below is an example app with:
 ```python
 import falcon
 
-from api.middlewares.auth_middleware import AuthMiddleware
-from api.middlewares.json_middleware import RequireJSON, JSONTranslator, JsonError
-from api.resources.index import IndexResource
-from api.resources.sqlalchemy import CollectionResource, SingleResource
+from falcon_dbapi.middlewares.auth_middleware import AuthMiddleware
+from falcon_dbapi.middlewares.json_middleware import RequireJSON, JSONTranslator, JsonError
+from falcon_dbapi.resources.index import IndexResource
+from falcon_dbapi.resources.sqlalchemy import CollectionResource, SingleResource
 
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy import create_engine

@@ -5,7 +5,7 @@ except ImportError:
 
 import falcon
 
-from api.exceptions import ParamException
+from falcon_dbapi.exceptions import ParamException
 
 
 class BaseResource(object):

@@ -29,7 +29,8 @@ class HtmlTranslator(object):
         :type resp: falcon.response.Response
 
         :param resource:
-        :type resource: api.resources.base.BaseCollectionResource|api.resources.base.BaseSingleResource
+        :type resource: falcon_dbapi.resources.base.BaseCollectionResource|
+                        falcon_dbapi.resources.base.BaseSingleResource
 
         :param params: parameters dict
         :type params: dict
@@ -106,7 +107,7 @@ class HtmlError(Exception):
     def __init__(self, translator):
         """
         :param translator: a HTML translator instance
-        :type translator: api.middlewares.html_middleware.HtmlTranslator
+        :type translator: falcon_dbapi.middlewares.html_middleware.HtmlTranslator
         """
         self.translator = translator
 

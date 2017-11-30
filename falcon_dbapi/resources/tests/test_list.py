@@ -4,7 +4,7 @@ from unittest.mock import Mock
 from falcon import Request, Response
 from falcon.testing import create_environ
 
-from api.resources import mongoengine
+from falcon_dbapi.resources import mongoengine
 
 
 class FakeObjectList(list):
@@ -22,7 +22,7 @@ class FakeObjectList(list):
 
 class MongoCollectionResourceTest(unittest.TestCase):
     """
-    Testcase for :class:`api.resources.mongoengine.CollectionResource`
+    Testcase for :class:`falcon_dbapi.resources.mongoengine.CollectionResource`
     """
 
     def test_get_object_list_no_limit_no_offset(self):

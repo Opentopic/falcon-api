@@ -3,8 +3,8 @@ import unittest
 from falcon import Request, Response
 from falcon.testing import create_environ
 
-from api.exceptions import ParamException
-from api.resources.mongoengine import CollectionResource
+from falcon_dbapi.exceptions import ParamException
+from falcon_dbapi.resources.mongoengine import CollectionResource
 
 
 class FakeObjectClass(dict):

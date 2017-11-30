@@ -2,24 +2,24 @@
 Resources API
 =============
 
-.. automodule:: api
+.. automodule:: falcon_dbapi
 
-.. automodule:: api.exceptions
+.. automodule:: falcon_dbapi.exceptions
     :members:
 
-.. automodule:: api.resources
+.. automodule:: falcon_dbapi.resources
 
-.. automodule:: api.resources.elasticsearch
-    :members:
-    :inherited-members:
-    :undoc-members:
-
-.. automodule:: api.resources.mongoengine
+.. automodule:: falcon_dbapi.resources.elasticsearch
     :members:
     :inherited-members:
     :undoc-members:
 
-.. automodule:: api.resources.sqlalchemy
+.. automodule:: falcon_dbapi.resources.mongoengine
+    :members:
+    :inherited-members:
+    :undoc-members:
+
+.. automodule:: falcon_dbapi.resources.sqlalchemy
     :members:
     :inherited-members:
     :undoc-members:

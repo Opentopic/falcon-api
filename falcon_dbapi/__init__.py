@@ -7,10 +7,11 @@ Supported backends include SQL (SQLAlchemy) and NoSQL (MongoDB, ElasticSearch) d
 Typical usage include:
 
 * using provided middleware for auth and content type negotiation when creating a Falcon application,
-  see :py:mod:`api.middlewares`
-* registering resources, see :py:mod:`api.resources`
-* registering an error handler, see :py:mod:`api.middlewares.json_middleware.JsonError`
+  see :py:mod:`falcon_dbapi.middlewares`
+* registering resources, see :py:mod:`falcon_dbapi.resources`
+* registering an error handler, see :py:mod:`falcon_dbapi.middlewares.json_middleware.JsonError`
 """
+__title__ = 'falcon_dbapi'
 __author__ = 'Jan Waś (jan.was@opentopic.com)'
 __license__ = 'MIT'
 __version__ = '1.1.29'

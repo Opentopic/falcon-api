@@ -3,7 +3,7 @@ try:
 except ImportError:
     import json
 from falcon import HTTPBadRequest, HTTPNotFound
-from api.resources.base import BaseCollectionResource, BaseSingleResource
+from falcon_dbapi.resources.base import BaseCollectionResource, BaseSingleResource
 
 
 class CollectionResource(BaseCollectionResource):

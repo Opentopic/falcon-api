@@ -10,7 +10,7 @@ from elasticsearch import NotFoundError
 from elasticsearch_dsl import Search, Nested
 from falcon import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTP_NO_CONTENT
 
-from api.resources.base import BaseCollectionResource, BaseSingleResource
+from falcon_dbapi.resources.base import BaseCollectionResource, BaseSingleResource
 
 
 class ElasticSearchMixin(object):

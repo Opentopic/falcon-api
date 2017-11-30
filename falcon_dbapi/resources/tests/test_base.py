@@ -3,12 +3,12 @@ import unittest
 from falcon import Request, Response
 from falcon.testing import create_environ
 
-from api.resources.base import BaseResource
+from falcon_dbapi.resources.base import BaseResource
 
 
 class BaseResourceTest(unittest.TestCase):
     """
-    Testcase for :class:`api.resources.base.BaseResource`
+    Testcase for :class:`falcon_dbapi.resources.base.BaseResource`
     """
 
     def test_render_response_status_200(self):

@@ -2,7 +2,7 @@
 Falcon API documentation
 ========================
 
-.. automodule:: api
+.. automodule:: falcon_dbapi
 
 .. toctree::
    :maxdepth: 2

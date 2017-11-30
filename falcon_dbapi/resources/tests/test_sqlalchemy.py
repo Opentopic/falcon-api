@@ -8,7 +8,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, ForeignKey, Table
 from sqlalchemy.orm import relationship
 
-from api.resources.sqlalchemy import CollectionResource, AlchemyMixin
+from falcon_dbapi.resources.sqlalchemy import CollectionResource, AlchemyMixin
 
 Base = declarative_base()
 

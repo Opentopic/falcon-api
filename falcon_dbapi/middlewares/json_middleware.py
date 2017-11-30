@@ -76,7 +76,7 @@ class JSONTranslator(object):
         :type resp: falcon.response.Response
 
         :param resource:
-        :type resource: api.resources.base.BaseResource
+        :type resource: falcon_dbapi.resources.base.BaseResource
 
         :param req_succeeded:
         :type req_succeeded: bool

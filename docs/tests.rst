@@ -9,4 +9,4 @@ Tu run tests you need run this command
 
     cd project_directory
     pip install pytest pytest-cov
-    py.test --cov=api
+    py.test --cov=falcon_dbapi
