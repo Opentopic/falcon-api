@@ -1021,13 +1021,13 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
             limit = int(limit)
         if offset is not None:
             offset = int(offset)
-        totals = self.get_param_totals(req)
+        totals_params = self.get_param_totals(req)
         # retrieve that param without removing it so self.get_queryset() so it can also use it
         relations = self.clean_relations(self.get_param_or_post(req, self.PARAM_RELATIONS, '', pop_params=False))
 
         with self.session_scope(self.db_engine) as db_session:
             query = self.get_queryset(req, resp, db_session, limit)
-            totals = self.get_total_objects(query, totals)
+            totals = self.get_total_objects(query, totals_params)
 
             object_list = self.get_object_list(query, limit, offset)
 
@@ -1039,7 +1039,7 @@ class CollectionResource(AlchemyMixin, BaseCollectionResource):
                       'returned': len(serialized)}  # avoid calling object_list.count() which executes the query again
             result.update(totals)
 
-        headers = {'x-api-total': str(result['total']) if result['total'] is not None else '',
+        headers = {'x-api-total': str(totals['total_count']) if 'total_count' in totals else '',
                    'x-api-returned': str(result['returned'])}
         resp.set_headers(headers)
         self.render_response(result, req, resp)
