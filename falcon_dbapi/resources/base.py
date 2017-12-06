@@ -300,12 +300,12 @@ class BaseCollectionResource(BaseResource):
         """
         object_list, totals = self.get_data(req, resp)
 
-        total_count = totals.pop('total_count') if 'total_count' in totals else None
+        total_count = totals.pop('total_count', None)
         result = {'results': [self.serialize(obj) for obj in object_list],
                   'total': total_count,
                   'returned': len(object_list)}
         result.update(totals)
-        headers = {'x-api-total': str(total_count) if total_count is not None else '',
+        headers = {'x-api-total': str(total_count) if isinstance(total_count, int) else '',
                    'x-api-returned': str(result['returned'])}
         resp.set_headers(headers)
         self.render_response(result, req, resp)
@@ -320,7 +320,8 @@ class BaseCollectionResource(BaseResource):
         """
         object_list, totals = self.get_data(req, resp)
 
-        headers = {'x-api-total': str(totals.pop('total_count')) if 'total_count' in totals else '',
+        total_count = totals.pop('total_count', None)
+        headers = {'x-api-total': str(total_count) if isinstance(total_count, int) else '',
                    'x-api-returned': str(len(object_list))}
         resp.set_headers(headers)
         resp.status = falcon.HTTP_NO_CONTENT

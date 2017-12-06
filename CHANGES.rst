@@ -1,3 +1,9 @@
+1.2.3
+=====
+
+Fixes:
+-  make sure the total http header in response is an int
+
 1.2.2
 =====
 
