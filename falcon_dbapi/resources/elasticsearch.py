@@ -183,7 +183,7 @@ class ElasticSearchMixin(object):
             result = parts[0] if op != 'must_not' else {'bool': {'must_not': parts[0]}}
         return result
 
-    def _create_expression(self, value, token, column_name, field, nested_name, prevent_expand):
+    def _build_expression(self, value, token, column_name, field, nested_name, prevent_expand):
         expression = {}
         op = self._underscore_operators[token]
         if token in ['range', 'notrange', 'in', 'notin', 'hasany', 'overlap']\
@@ -236,7 +236,7 @@ class ElasticSearchMixin(object):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
                                                               'operator'.format('__'.join(tokens), token))
                 if token in self._underscore_operators:
-                    return self._create_expression(value, token, column_name, field, nested_name, prevent_expand)
+                    return self._build_expression(value, token, column_name, field, nested_name, prevent_expand)
             if accumulated and accumulated in mapping\
                     and isinstance(mapping[accumulated], Nested):
                 nested_name = accumulated
@@ -252,7 +252,7 @@ class ElasticSearchMixin(object):
                 if prefer_raw and 'raw' in sub_fields and sub_fields['raw'].index == 'not_analyzed':
                     column_name += '.raw'
             if token in sub_fields:
-                column_name = ".".join([column_name, token])
+                column_name = '{}.{}'.format(column_name, token)
         if column_name is None:
             raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, it is expected to be a known '
                                                       'column name'.format('__'.join(tokens)))
