@@ -1,4 +1,5 @@
 import copy
+from itertools import chain
 try:
     import ujson as json
 except ImportError:
@@ -185,6 +186,7 @@ class ElasticSearchMixin(object):
     def _parse_tokens(self, obj_class, tokens, value, default_expression=None, prevent_expand=True, prefer_raw=False):
         column_name = None
         field = None
+        sub_fields = {}
         nested_name = None
         accumulated = ''
         mapping = obj_class._doc_type.mapping
@@ -197,9 +199,12 @@ class ElasticSearchMixin(object):
                 return query_method(self=obj_class, column_name=column_name, value=value,
                                     default_op='should' if tokens[-1] == 'or' else 'must')
             if column_name is not None:
-                if token not in self._underscore_operators:
+                if token not in chain(self._underscore_operators, sub_fields):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
                                                               'operator'.format('__'.join(tokens), token))
+                if token in sub_fields:
+                    column_name = ".".join([column_name, token])
+                    break
                 op = self._underscore_operators[token]
                 if token in ['range', 'notrange', 'in', 'notin', 'hasany', 'overlap']\
                         or (token in ['contains', 'notcontains'] and field._multi):
@@ -241,8 +246,8 @@ class ElasticSearchMixin(object):
                     not isinstance(mapping[accumulated], Nested):
                 column_name = ((nested_name + '.') if nested_name else '') + accumulated
                 field = mapping[accumulated]
-                if prefer_raw and getattr(field, 'fields', None) is not None and 'raw' in field.fields and \
-                        field.fields['raw'].index == 'not_analyzed':
+                sub_fields = getattr(field, 'fields', {})
+                if prefer_raw and 'raw' in sub_fields and sub_fields['raw'].index == 'not_analyzed':
                     column_name += '.raw'
         if column_name is None:
             raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, it is expected to be a known '

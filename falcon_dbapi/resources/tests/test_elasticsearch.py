@@ -16,7 +16,7 @@ class OtherModel(InnerObjectWrapper):
 
 class Model(DocType):
     id = Integer()
-    name = String()
+    name = String(fields={'sub': String()})
 
     other_models = Nested(doc_class=OtherModel, multi=True, properties={
         'id': Integer(),
@@ -41,6 +41,8 @@ def connection():
 @pytest.fixture(params=[
     ({'name__exact': 'value'},
      """{"term": {"name": "value"}}"""),
+    ({'name__sub__exact': 'value'},
+     """{"term": {"name.sub": "value"}}"""),
     ("""{"name__exact": "value",
          "id__gte": "20"}""",
      """{"bool": {"must": [{"term": {"name": "value"}},
