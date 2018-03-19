@@ -183,6 +183,39 @@ class ElasticSearchMixin(object):
             result = parts[0] if op != 'must_not' else {'bool': {'must_not': parts[0]}}
         return result
 
+    def _create_expression(self, value, token, column_name, field, nested_name, prevent_expand):
+        expression = {}
+        op = self._underscore_operators[token]
+        if token in ['range', 'notrange', 'in', 'notin', 'hasany', 'overlap']\
+                or (token in ['contains', 'notcontains'] and field._multi):
+            if not isinstance(value, list):
+                value = [value]
+        if op in ['missing', 'exists']:
+            expression = {op: {'field': column_name}}
+        elif op == 'range':
+            if token != 'range':
+                expression = {op: {column_name: {token: value}}}
+            else:
+                expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}}}
+        elif op == 'wildcard':
+            if token == 'contains' or token == 'notcontains':
+                if field._multi:
+                    op = 'terms'
+                    expression = {op: {column_name: value}}
+                else:
+                    expression = {op: {column_name: '*' + value + '*'}}
+            else:
+                expression = {op: {column_name: '*' + value}}
+        else:
+            expression = {op: {column_name: value}}
+        if prevent_expand:
+            expression[op]['_expand__to_dot'] = False
+        if token.startswith('not'):
+            expression = {'bool': {'must_not': expression}}
+        if nested_name is not None:
+            return {'nested': {'path': nested_name, 'query': expression}}
+        return expression
+
     def _parse_tokens(self, obj_class, tokens, value, default_expression=None, prevent_expand=True, prefer_raw=False):
         column_name = None
         field = None
@@ -202,39 +235,8 @@ class ElasticSearchMixin(object):
                 if token not in chain(self._underscore_operators, sub_fields):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
                                                               'operator'.format('__'.join(tokens), token))
-                if token in sub_fields:
-                    column_name = ".".join([column_name, token])
-                    break
-                op = self._underscore_operators[token]
-                if token in ['range', 'notrange', 'in', 'notin', 'hasany', 'overlap']\
-                        or (token in ['contains', 'notcontains'] and field._multi):
-                    if not isinstance(value, list):
-                        value = [value]
-                if op in ['missing', 'exists']:
-                    expression = {op: {'field': column_name}}
-                elif op == 'range':
-                    if token != 'range':
-                        expression = {op: {column_name: {token: value}}}
-                    else:
-                        expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}}}
-                elif op == 'wildcard':
-                    if token == 'contains' or token == 'notcontains':
-                        if field._multi:
-                            op = 'terms'
-                            expression = {op: {column_name: value}}
-                        else:
-                            expression = {op: {column_name: '*' + value + '*'}}
-                    else:
-                        expression = {op: {column_name: '*' + value}}
-                else:
-                    expression = {op: {column_name: value}}
-                if prevent_expand:
-                    expression[op]['_expand__to_dot'] = False
-                if token.startswith('not'):
-                    expression = {'bool': {'must_not': expression}}
-                if nested_name is not None:
-                    return {'nested': {'path': nested_name, 'query': expression}}
-                return expression
+                if token in self._underscore_operators:
+                    return self._create_expression(value, token, column_name, field, nested_name, prevent_expand)
             if accumulated and accumulated in mapping\
                     and isinstance(mapping[accumulated], Nested):
                 nested_name = accumulated
@@ -249,6 +251,8 @@ class ElasticSearchMixin(object):
                 sub_fields = getattr(field, 'fields', {})
                 if prefer_raw and 'raw' in sub_fields and sub_fields['raw'].index == 'not_analyzed':
                     column_name += '.raw'
+            if token in sub_fields:
+                column_name = ".".join([column_name, token])
         if column_name is None:
             raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, it is expected to be a known '
                                                       'column name'.format('__'.join(tokens)))

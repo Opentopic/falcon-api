@@ -11,7 +11,7 @@ from elasticsearch_dsl import Search
 
 class OtherModel(InnerObjectWrapper):
     id = Integer()
-    name = String(fields={'raw': String(index='not_analyzed')})
+    name = String(fields={'raw': String(index='not_analyzed'), 'sub': String()})
 
 
 class Model(DocType):
@@ -20,7 +20,7 @@ class Model(DocType):
 
     other_models = Nested(doc_class=OtherModel, multi=True, properties={
         'id': Integer(),
-        'name': String(fields={'raw': String(index='not_analyzed')}),
+        'name': String(fields={'raw': String(index='not_analyzed'), 'sub': String()})
     })
 
     class Meta:
@@ -49,6 +49,8 @@ def connection():
                            {"range": {"id": {"gte": "20"}}}]}}"""),
     ("""{"other_models__name": "value"}""",
      """{"nested": {"path": "other_models", "query": {"term": {"other_models.name": "value"}}}}"""),
+    ("""{"other_models__name__sub": "value"}""",
+     """{"nested": {"path": "other_models", "query": {"term": {"other_models.name.sub": "value"}}}}"""),
     ("""{"or": {"name": "value",
                  "id": 20}}""",
      """{"bool": {"should": [{"term": {"name": "value"}},
