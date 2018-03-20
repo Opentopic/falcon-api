@@ -116,7 +116,6 @@ def query_ordered(request):
      """{"aggs": {"name": {"terms": {"field": "name",
                                      "size": 0}}},
          "query": {"match_all": {}}}"""),
-
     ("""[{"sum": ["id"]},
          {"group_by": ["name"]}]""",
      """{"aggs": {"name": {"terms": {"field":
@@ -143,6 +142,16 @@ def query_ordered(request):
                                                                        "order": {"sum": "desc"}},
                                                              "aggs": {"sum": {"sum": {"field": "id"}}} }} }},
          "query": {"match_all": {}}}"""),
+    ("""[{"sum": ["id"]},
+         {"group_by": ["other_models__name__sub"]},
+         {"group_limit": 5}]""",
+     """{"aggs": {"nested": {"nested": {"path": "other_models"},
+                             "aggs": {"other_models__name__sub": {"terms": {"field": "other_models.name.sub",
+                                                                       "size": 5,
+                                                                       "order": {"sum": "desc"}},
+                                                             "aggs": {"sum": {"sum": {"field": "id"}}} }} }},
+         "query": {"match_all": {}}}"""),
+
 
     ("""[{"max": ["other_models__id"]},
          {"group_by": [{"other_models__id__gte": 5}, "other_models__name"]}]""",

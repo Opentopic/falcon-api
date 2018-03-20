@@ -216,6 +216,12 @@ class ElasticSearchMixin(object):
             return {'nested': {'path': nested_name, 'query': expression}}
         return expression
 
+    def _is_next_token_subfield(self, index, tokens, sub_fields):
+        try:
+            return tokens[index+1] in sub_fields
+        except IndexError:
+            return False
+
     def _parse_tokens(self, obj_class, tokens, value, default_expression=None, prevent_expand=True, prefer_raw=False):
         column_name = None
         field = None
@@ -237,8 +243,8 @@ class ElasticSearchMixin(object):
                                                               'operator'.format('__'.join(tokens), token))
                 if token in self._underscore_operators:
                     return self._build_expression(value, token, column_name, field, nested_name, prevent_expand)
-            if accumulated and accumulated in mapping\
-                    and isinstance(mapping[accumulated], Nested):
+            if accumulated and accumulated in mapping and\
+                    isinstance(mapping[accumulated], Nested):
                 nested_name = accumulated
                 obj_class = mapping[accumulated]._doc_class
                 mapping = mapping[accumulated]
@@ -249,7 +255,8 @@ class ElasticSearchMixin(object):
                 column_name = ((nested_name + '.') if nested_name else '') + accumulated
                 field = mapping[accumulated]
                 sub_fields = getattr(field, 'fields', {})
-                if prefer_raw and 'raw' in sub_fields and sub_fields['raw'].index == 'not_analyzed':
+                if prefer_raw and 'raw' in sub_fields and sub_fields['raw'].index == 'not_analyzed' and\
+                        not self._is_next_token_subfield(index, tokens, sub_fields):
                     column_name += '.raw'
             if token in sub_fields:
                 column_name = '{}.{}'.format(column_name, token)
