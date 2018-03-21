@@ -1,4 +1,5 @@
 import copy
+from itertools import chain
 try:
     import ujson as json
 except ImportError:
@@ -182,9 +183,49 @@ class ElasticSearchMixin(object):
             result = parts[0] if op != 'must_not' else {'bool': {'must_not': parts[0]}}
         return result
 
+    def _build_expression(self, value, token, column_name, field, nested_name, prevent_expand):
+        expression = {}
+        op = self._underscore_operators[token]
+        if token in ['range', 'notrange', 'in', 'notin', 'hasany', 'overlap']\
+                or (token in ['contains', 'notcontains'] and field._multi):
+            if not isinstance(value, list):
+                value = [value]
+        if op in ['missing', 'exists']:
+            expression = {op: {'field': column_name}}
+        elif op == 'range':
+            if token != 'range':
+                expression = {op: {column_name: {token: value}}}
+            else:
+                expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}}}
+        elif op == 'wildcard':
+            if token == 'contains' or token == 'notcontains':
+                if field._multi:
+                    op = 'terms'
+                    expression = {op: {column_name: value}}
+                else:
+                    expression = {op: {column_name: '*' + value + '*'}}
+            else:
+                expression = {op: {column_name: '*' + value}}
+        else:
+            expression = {op: {column_name: value}}
+        if prevent_expand:
+            expression[op]['_expand__to_dot'] = False
+        if token.startswith('not'):
+            expression = {'bool': {'must_not': expression}}
+        if nested_name is not None:
+            return {'nested': {'path': nested_name, 'query': expression}}
+        return expression
+
+    def _is_next_token_subfield(self, index, tokens, sub_fields):
+        try:
+            return tokens[index+1] in sub_fields
+        except IndexError:
+            return False
+
     def _parse_tokens(self, obj_class, tokens, value, default_expression=None, prevent_expand=True, prefer_raw=False):
         column_name = None
         field = None
+        sub_fields = {}
         nested_name = None
         accumulated = ''
         mapping = obj_class._doc_type.mapping
@@ -196,54 +237,33 @@ class ElasticSearchMixin(object):
                                                               'can\'t provide a query'.format('__'.join(tokens)))
                 return query_method(self=obj_class, column_name=column_name, value=value,
                                     default_op='should' if tokens[-1] == 'or' else 'must')
+
             if column_name is not None:
-                if token not in self._underscore_operators:
+                if token not in chain(self._underscore_operators, sub_fields):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
-                                                              'operator'.format('__'.join(tokens), token))
-                op = self._underscore_operators[token]
-                if token in ['range', 'notrange', 'in', 'notin', 'hasany', 'overlap']\
-                        or (token in ['contains', 'notcontains'] and field._multi):
-                    if not isinstance(value, list):
-                        value = [value]
-                if op in ['missing', 'exists']:
-                    expression = {op: {'field': column_name}}
-                elif op == 'range':
-                    if token != 'range':
-                        expression = {op: {column_name: {token: value}}}
-                    else:
-                        expression = {op: {column_name: {'gte': value[0], 'lte': value[1]}}}
-                elif op == 'wildcard':
-                    if token == 'contains' or token == 'notcontains':
-                        if field._multi:
-                            op = 'terms'
-                            expression = {op: {column_name: value}}
-                        else:
-                            expression = {op: {column_name: '*' + value + '*'}}
-                    else:
-                        expression = {op: {column_name: '*' + value}}
-                else:
-                    expression = {op: {column_name: value}}
-                if prevent_expand:
-                    expression[op]['_expand__to_dot'] = False
-                if token.startswith('not'):
-                    expression = {'bool': {'must_not': expression}}
-                if nested_name is not None:
-                    return {'nested': {'path': nested_name, 'query': expression}}
-                return expression
-            if accumulated and accumulated in mapping\
-                    and isinstance(mapping[accumulated], Nested):
+                                                              'operator or a subfield'.format('__'.join(tokens), token))
+                if token in self._underscore_operators:
+                    return self._build_expression(value, token, column_name, field, nested_name, prevent_expand)
+
+            if accumulated and accumulated in mapping and isinstance(mapping[accumulated], Nested):
+                # check if previously accumulated tokens match an existing nested field and switch mappings to it
                 nested_name = accumulated
                 obj_class = mapping[accumulated]._doc_class
                 mapping = mapping[accumulated]
                 accumulated = ''
+
             accumulated += ('__' if accumulated else '') + token
-            if accumulated in mapping and \
-                    not isinstance(mapping[accumulated], Nested):
+            if accumulated in mapping and not isinstance(mapping[accumulated], Nested):
                 column_name = ((nested_name + '.') if nested_name else '') + accumulated
                 field = mapping[accumulated]
-                if prefer_raw and getattr(field, 'fields', None) is not None and 'raw' in field.fields and \
-                        field.fields['raw'].index == 'not_analyzed':
+                sub_fields = getattr(field, 'fields', {})
+                if prefer_raw and 'raw' in sub_fields and sub_fields['raw'].index == 'not_analyzed' and\
+                        not self._is_next_token_subfield(index, tokens, sub_fields):
                     column_name += '.raw'
+
+            if token in sub_fields:
+                column_name = '{}.{}'.format(column_name, token)
+
         if column_name is None:
             raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, it is expected to be a known '
                                                       'column name'.format('__'.join(tokens)))
