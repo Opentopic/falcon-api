@@ -1,3 +1,9 @@
+1.2.4
+=====
+
+Changes:
+-  support Elasticsearch subfields using a dot notation
+
 1.2.3
 =====
 
