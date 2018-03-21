@@ -237,29 +237,33 @@ class ElasticSearchMixin(object):
                                                               'can\'t provide a query'.format('__'.join(tokens)))
                 return query_method(self=obj_class, column_name=column_name, value=value,
                                     default_op='should' if tokens[-1] == 'or' else 'must')
+
             if column_name is not None:
                 if token not in chain(self._underscore_operators, sub_fields):
                     raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, part {} is expected to be a known '
-                                                              'operator'.format('__'.join(tokens), token))
+                                                              'operator or a subfield'.format('__'.join(tokens), token))
                 if token in self._underscore_operators:
                     return self._build_expression(value, token, column_name, field, nested_name, prevent_expand)
-            if accumulated and accumulated in mapping and\
-                    isinstance(mapping[accumulated], Nested):
+
+            if accumulated and accumulated in mapping and isinstance(mapping[accumulated], Nested):
+                # check if previously accumulated tokens match an existing nested field and switch mappings to it
                 nested_name = accumulated
                 obj_class = mapping[accumulated]._doc_class
                 mapping = mapping[accumulated]
                 accumulated = ''
+
             accumulated += ('__' if accumulated else '') + token
-            if accumulated in mapping and \
-                    not isinstance(mapping[accumulated], Nested):
+            if accumulated in mapping and not isinstance(mapping[accumulated], Nested):
                 column_name = ((nested_name + '.') if nested_name else '') + accumulated
                 field = mapping[accumulated]
                 sub_fields = getattr(field, 'fields', {})
                 if prefer_raw and 'raw' in sub_fields and sub_fields['raw'].index == 'not_analyzed' and\
                         not self._is_next_token_subfield(index, tokens, sub_fields):
                     column_name += '.raw'
+
             if token in sub_fields:
                 column_name = '{}.{}'.format(column_name, token)
+
         if column_name is None:
             raise HTTPBadRequest('Invalid attribute', 'Param {} is invalid, it is expected to be a known '
                                                       'column name'.format('__'.join(tokens)))
